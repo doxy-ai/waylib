@@ -2,3 +2,7 @@
 	path = thirdparty/glm
 	url = https://github.com/g-truc/glm
 	shallow = true
+[submodule "thirdparty/glfw"]
+	path = thirdparty/glfw
+	url = https://github.com/glfw/glfw.git
+	shallow = true

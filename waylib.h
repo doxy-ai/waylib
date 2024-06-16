@@ -1,28 +1,9 @@
 #pragma once
+#include "config.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#ifdef __cplusplus
-	#ifndef WAYLIB_DISABLE_CLASSES
-	#define WAYLIB_ENABLE_CLASSES
-	#endif
-#else
-	#include <stdint.h>
-#endif
-
-// Macro which switches the type depending on if we are compiling in C or C++
-#ifdef __cplusplus
-	#define WAYLIB_C_OR_CPP_TYPE(ctype, cpptype) cpptype
-#else
-	#define WAYLIB_C_OR_CPP_TYPE(ctype, cpptype) ctype
-#endif
-
-// Define the type of indecies... by default it is a u32 (2 byte number)
-#ifndef WAYLIB_INDEX_TYPE
-	#define WAYLIB_INDEX_TYPE uint32_t
-#endif
-typedef WAYLIB_INDEX_TYPE index_t;
 
 // Define mathematical types used... in C++ they are provided by hlsl++ so we just prototype them here!
 typedef struct mat4x4f_ {
@@ -53,6 +34,7 @@ struct mat4x4f;
 typedef struct {
 	unsigned char r, g, b, a;
 } color8bit;
+
 
 
 // Mesh, vertex data
