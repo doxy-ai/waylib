@@ -35,6 +35,10 @@ typedef struct {
 	unsigned char r, g, b, a;
 } color8bit;
 
+typedef struct {
+	float r, g, b, a;
+} color32bit;
+
 
 // Shader 
 typedef struct shader {
@@ -101,6 +105,16 @@ typedef struct model {
 #endif
 } model;
 
+// Format of the data stored in the image
+WAYLIB_ENUM image_format {
+	C_PREPEND(IMAGE_FORMAT_, RGBA8) = 0,
+	// C_PREPEND(IMAGE_FORMAT_, RGB8),
+	// C_PREPEND(IMAGE_FORMAT_, Gray8),
+	C_PREPEND(IMAGE_FORMAT_, RGBAF32),
+	// C_PREPEND(IMAGE_FORMAT_, RGBF32),
+	// C_PREPEND(IMAGE_FORMAT_, Gray32),
+};
+
 // Image, pixel data stored in CPU memory (RAM)
 // From: raylib.h
 typedef struct image {
@@ -108,7 +122,7 @@ typedef struct image {
 	int width;              // Image base width
 	int height;             // Image base height
 	int mipmaps;            // Mipmap levels, 1 by default
-	int format;             // Data format (PixelFormat type)
+	image_format format;    // Data format (PixelFormat type)
 } image;
 
 WAYLIB_C_OR_CPP_TYPE(WGPUDevice, wgpu::Device) create_default_device_from_instance(

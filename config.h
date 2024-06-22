@@ -21,6 +21,9 @@
 	#define WAYLIB_C_OR_CPP_TYPE(ctype, cpptype) ctype
 #endif
 
+#define WAYLIB_ENUM WAYLIB_C_OR_CPP_TYPE(enum, enum class)
+#define C_PREPEND(pre, base) WAYLIB_C_OR_CPP_TYPE(pre##base, base)
+
 // Macro which defines an optional struct
 #ifdef __cplusplus
 	template<typename T>

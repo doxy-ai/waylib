@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 project(Waylib LANGUAGES C CXX)
 
-set(CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 20)
 
 add_subdirectory(thirdparty/WebGPU-distribution)
 set(GLM_ENABLE_CXX_20 ON CACHE BOOL "Enable C++ 20")
@@ -21,9 +21,14 @@ add_library(waylib::window ALIAS waylib_window)
 target_link_libraries(waylib_window PUBLIC glfw glfw3webgpu waylib)
 target_compile_definitions(waylib_window PUBLIC WAYLIB_NAMESPACE_NAME=wl)
 
+add_library(waylib_texture texture.cpp thirdparty/miniz.c)
+add_library(waylib::texture ALIAS waylib_texture)
+target_link_libraries(waylib_texture PUBLIC waylib)
+target_compile_definitions(waylib_texture PUBLIC WAYLIB_NAMESPACE_NAME=wl)
+
 add_library(waylib_model model.cpp)
 add_library(waylib::model ALIAS waylib_model)
-target_link_libraries(waylib_model PUBLIC assimp::assimp waylib)
+target_link_libraries(waylib_model PUBLIC assimp::assimp waylib_texture)
 target_compile_definitions(waylib_model PUBLIC WAYLIB_NAMESPACE_NAME=wl)
 
 add_executable(waylib_tests test.cpp)

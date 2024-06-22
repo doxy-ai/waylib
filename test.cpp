@@ -10,9 +10,17 @@ int main() {
 	// y.xy();
 	std::cout << x.x << ", " << x.y << std::endl;
 
-	auto _model = wl::load_model("../tri.obj");
+	{auto _model = wl::load_model("../tri.obj");
 	if(!_model.has_value) return 1;
-	wl::model model = _model.value;
+	wl::model model = _model.value;}
+
+	{auto _image = wl::load_image("../test.png");
+	if(!_image.has_value) return 2;
+	wl::image image = _image.value;}
+	
+	{auto _image = wl::load_image("../test.exr");
+	if(!_image.has_value) return 2;
+	wl::image image = _image.value;}
 
 	auto window = wl::create_window(800, 600, "waylib");
 	auto [device, surface] = wl::create_default_device_from_window(window);

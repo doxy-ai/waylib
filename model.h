@@ -1,5 +1,5 @@
 #pragma once
-#include "waylib.h"
+#include "texture.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -76,10 +76,21 @@ typedef struct model_process_configuration {
 	; model_process_optimization_configuration optimize;
 } model_process_configuration;
 
+
+
+
 model_process_configuration default_model_process_configuration();
 
 WAYLIB_OPTIONAL(model) load_model(
 	const char * file_path,
+	model_process_configuration config
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= default_model_process_configuration()
+#endif
+);
+
+WAYLIB_OPTIONAL(model) load_model_from_memory(
+	const unsigned char* data, size_t size,
 	model_process_configuration config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= default_model_process_configuration()
