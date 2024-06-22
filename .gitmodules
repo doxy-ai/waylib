@@ -9,3 +9,6 @@
 [submodule "thirdparty/glfw3webgpu"]
 	path = thirdparty/glfw3webgpu
 	url = https://github.com/eliemichel/glfw3webgpu.git
+[submodule "thirdparty/assimp"]
+	path = thirdparty/assimp
+	url = https://github.com/assimp/assimp.git

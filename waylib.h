@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-// Define mathematical types used... in C++ they are provided by hlsl++ so we just prototype them here!
+// Define mathematical types used... in C++ they are provided by glm so we just prototype them here!
 typedef struct mat4x4f_ {
 	float a0, a1, a2, a3;
 	float b0, b1, b2, b3;
@@ -36,6 +36,10 @@ typedef struct {
 } color8bit;
 
 
+// Shader 
+typedef struct shader {
+	
+} shader;
 
 // Mesh, vertex data
 // From: raylib.h
@@ -44,7 +48,7 @@ typedef struct mesh {
 	index_t triangleCount;     // Number of triangles stored (indexed or not)
 
 	// Vertex attributes data
-	vec3f* vertices;          // Vertex position (shader-location = 0)
+	vec3f* positions;         // Vertex position (shader-location = 0)
 	vec2f* texcoords;         // Vertex texture coordinates (shader-location = 1)
 	vec2f* texcoords2;        // Vertex texture second coordinates (shader-location = 5)
 	vec3f* normals;           // Vertex normals (shader-location = 2)
@@ -56,10 +60,10 @@ typedef struct mesh {
 	vec3f* anim_vertices;     // Animated vertex positions (after bones transformations)
 	vec3f* anim_normals;      // Animated normals (after bones transformations)
 	unsigned char* bone_ids;  // Vertex bone ids, max 255 bone ids, up to 4 bones influence by vertex (skinning)
-	float* bone_weights;      // Vertex bone weight, up to 4 bones influence by vertex (skinning)
+	vec4f* bone_weights;      // Vertex bone weight, up to 4 bones influence by vertex (skinning)
 } mesh;
 
-// Bone, skeletal animation bone
+// 
 // From: raylib.h
 typedef struct material {
 	/*What should go here?*/
@@ -86,7 +90,7 @@ typedef struct model {
 	index_t material_count;  // Number of materials
 	mesh* meshes;            // Meshes array
 	material* materials;     // Materials array
-	index_t* mesh_material;  // Mesh material number
+	index_t* mesh_materials; // Mesh material number
 
 	// Animation data
 	index_t bone_count;      // Number of bones

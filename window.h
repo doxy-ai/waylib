@@ -1,9 +1,10 @@
 #pragma once
-#include "GLFW/glfw3.h"
 #include "config.h"
 
 #ifdef __cplusplus
 extern "C" {
+#else
+#include "GLFW/glfw3.h"
 #endif
 
 #ifdef __cplusplus

@@ -8,6 +8,7 @@ set(GLM_ENABLE_CXX_20 ON CACHE BOOL "Enable C++ 20")
 set(GLM_ENABLE_LANG_EXTENSIONS ON CACHE BOOL "Enable language extensions")
 add_subdirectory(thirdparty/glm)
 add_subdirectory(thirdparty/glfw3webgpu)
+add_subdirectory(thirdparty/assimp)
 
 
 
@@ -20,5 +21,10 @@ add_library(waylib::window ALIAS waylib_window)
 target_link_libraries(waylib_window PUBLIC glfw glfw3webgpu waylib)
 target_compile_definitions(waylib_window PUBLIC WAYLIB_NAMESPACE_NAME=wl)
 
+add_library(waylib_model model.cpp)
+add_library(waylib::model ALIAS waylib_model)
+target_link_libraries(waylib_model PUBLIC assimp::assimp waylib)
+target_compile_definitions(waylib_model PUBLIC WAYLIB_NAMESPACE_NAME=wl)
+
 add_executable(waylib_tests test.cpp)
-target_link_libraries(waylib_tests PUBLIC waylib waylib::window)
+target_link_libraries(waylib_tests PUBLIC waylib waylib::window waylib::model)

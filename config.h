@@ -21,6 +21,25 @@
 	#define WAYLIB_C_OR_CPP_TYPE(ctype, cpptype) ctype
 #endif
 
+// Macro which defines an optional struct
+#ifdef __cplusplus
+	template<typename T>
+	struct optional {
+		bool has_value;
+		T value;
+	};
+	#ifdef WAYLIB_NAMESPACE_NAME
+		#define WAYLIB_OPTIONAL(type) WAYLIB_NAMESPACE_NAME::optional<type>
+	#else
+		#define WAYLIB_OPTIONAL(type) optional<type>
+	#endif
+#else
+	#define WAYLIB_OPTIONAL(type) struct {\
+		bool has_value;\
+		type value;\
+	}
+#endif
+
 // Define the type of indices... by default it is a u32 (2 byte integer)
 #ifndef WAYLIB_INDEX_TYPE
 	#define WAYLIB_INDEX_TYPE uint32_t

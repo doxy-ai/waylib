@@ -1,5 +1,6 @@
 #include "waylib.hpp"
 #include "window.hpp"
+#include "model.hpp"
 
 #include <iostream>
 
@@ -8,6 +9,10 @@ int main() {
 	auto x = y.xx();
 	// y.xy();
 	std::cout << x.x << ", " << x.y << std::endl;
+
+	auto _model = wl::load_model("../tri.obj");
+	if(!_model.has_value) return 1;
+	wl::model model = _model.value;
 
 	auto window = wl::create_window(800, 600, "waylib");
 	auto [device, surface] = wl::create_default_device_from_window(window);
