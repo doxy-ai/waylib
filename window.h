@@ -92,7 +92,7 @@ window* create_window(
 #endif
 );
 
-void window_free(
+void release_window(
 	window* window
 );
 

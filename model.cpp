@@ -123,7 +123,7 @@ WAYLIB_OPTIONAL(model) load_model(const char* file_path, model_process_configura
 
 	const aiScene* scene = importer.ReadFile(file_path, detail::calculateFlags(config));
 	if (scene == nullptr) {
-		std::cerr << "Error: " << importer.GetErrorString() << std::endl;
+		set_error_message_raw(importer.GetErrorString());
 		return {};
 	}
 
@@ -136,7 +136,7 @@ WAYLIB_OPTIONAL(model) load_model_from_memory(const unsigned char * data, size_t
 
 	const aiScene* scene = importer.ReadFileFromMemory(data, size, detail::calculateFlags(config));
 	if (scene == nullptr) {
-		std::cerr << "Error: " << importer.GetErrorString() << std::endl;
+		set_error_message_raw(importer.GetErrorString());
 		return {};
 	}
 
@@ -145,10 +145,6 @@ WAYLIB_OPTIONAL(model) load_model_from_memory(const unsigned char * data, size_t
 WAYLIB_OPTIONAL(model) load_model_from_memory(std::span<std::byte> data, model_process_configuration config) {
 	return load_model_from_memory((unsigned char*)data.data(), data.size(), config);
 }
-
-// WAYLIB_OPTIONAL(model) load_model(std::string_view file_path, model_process_configuration config /*= {}*/) {
-// 	return load_model((const char*)file_path.data(), config);
-// }
 
 #ifdef WAYLIB_NAMESPACE_NAME
 }

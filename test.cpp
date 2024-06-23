@@ -48,9 +48,9 @@ int main() {
 	// wgpuQueueOnSubmittedWorkDone(queue, onQueueWorkDone, nullptr /* pUserData */);
 
 	while(!wl::window_should_close(window)) {
-		auto _frame = wl::begin_drawing(state, wl::color8bit{229, 25, 51, 255});
-		if(!_frame.has_value) continue;
-		auto& frame = _frame.value;
+		auto frame = wl::promote_null_to_exception(
+			wl::begin_drawing(state, wl::color8bit{229, 25, 51, 255})
+		);
 		{
 			
 		}
@@ -58,5 +58,5 @@ int main() {
 	}
 
 	wl::release_webgpu_state(state);
-	wl::window_free(window);
+	wl::release_window(window);
 }

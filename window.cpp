@@ -74,7 +74,7 @@ window* create_window(size_t width, size_t height, std::string_view title, windo
 	return create_window(width, height, title.data(), config);
 }
 
-void window_free(window* window) {
+void release_window(window* window) {
 	glfwDestroyWindow(window);
 }
 

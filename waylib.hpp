@@ -5,6 +5,10 @@
 
 #include "wgsl_types.hpp"
 
+#ifdef __cpp_exceptions
+#include <stdexcept>
+#endif
+
 #ifdef WAYLIB_NAMESPACE_NAME
 namespace WAYLIB_NAMESPACE_NAME {
 inline namespace wgpu {
@@ -25,6 +29,29 @@ namespace wgpu {
 
 wgpu::Color to_webgpu(const wl::color8bit& color);
 wgpu::Color to_webgpu(const wl::color32bit& color);
+
+std::string get_error_message_and_clear();
+#ifdef __cpp_exceptions
+	struct error: public std::runtime_error {
+		using std::runtime_error::runtime_error;
+	};
+
+	template<typename T>
+	T promote_null_to_exception(const WAYLIB_OPTIONAL(T)& opt) {
+		if(opt.has_value) return opt.value;
+
+		auto msg = get_error_message_and_clear();
+		throw error(msg.empty() ? "Null value encountered" : msg);
+	}
+#else
+	template<typename T>
+	T promote_null_to_exception(const WAYLIB_OPTIONAL(T)& opt) {
+		assert(opt.has_value, get_error_message());
+		return opt.value;
+	}
+#endif
+void set_error_message(const std::string_view view);
+void set_error_message(const std::string& str);
 
 #ifdef WAYLIB_NAMESPACE_NAME
 }

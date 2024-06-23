@@ -1,7 +1,5 @@
 #include "texture.hpp"
 
-// #include <filesystem>
-
 #define STB_IMAGE_IMPLEMENTATION
 #include "thirdparty/stb_image.h"
 
@@ -19,7 +17,7 @@ namespace detail {
 		int channels;
 		image.data = loader(&image.width, &image.height, &channels);
 		if(image.data == nullptr) {
-			std::cerr << "Error: " << stbi_failure_reason() << std::endl;
+			set_error_message_raw(stbi_failure_reason());
 			return {};
 		}
 
@@ -37,7 +35,7 @@ namespace detail {
 		int ret = loader((float**)&image.data, &image.width, &image.height, &err);
 		if (ret != TINYEXR_SUCCESS) {
 			if (err) {
-				std::cerr << "Error: " << stbi_failure_reason() << std::endl;
+				set_error_message_raw(err);
 				FreeEXRErrorMessage(err); // release memory of error message.
 			}
 			return {};
@@ -47,10 +45,6 @@ namespace detail {
 		image.mipmaps = 0;
 		return image;
 	}
-
-	// std::string get_extension(const char* file_path) {
-	// 	return std::filesystem::path(file_path).extension();
-	// }
 }
 
 

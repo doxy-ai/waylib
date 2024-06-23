@@ -18,6 +18,32 @@ wgpu::Color to_webgpu(const color32bit& color) {
 	return {color.r, color.g, color.b, color.a};
 }
 
+static std::string error_message = "";
+
+const char* get_error_message() {
+	if(error_message.empty()) return nullptr;
+	return error_message.c_str();
+}
+
+void set_error_message_raw(const char* message) {
+	error_message = message;
+}
+void set_error_message(const std::string_view view) {
+	error_message = std::string(view);
+}
+void set_error_message(const std::string& str) {
+	error_message = str;
+}
+
+void clear_error_message() { 
+	set_error_message_raw(""); 
+}
+std::string get_error_message_and_clear() {
+	std::string out = get_error_message();
+	clear_error_message();
+	return out;
+}
+
 wgpu::Device create_default_device_from_instance(WGPUInstance instance, WGPUSurface surface /*= nullptr*/, bool prefer_low_power /*= false*/) {
 	wgpu::RequestAdapterOptions adapterOpts = {};
 	adapterOpts.compatibleSurface = surface;
