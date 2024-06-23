@@ -1,5 +1,8 @@
 #include "window.hpp"
-#include "GLFW/glfw3.h"
+#define index_t wl::index_t
+#include "waylib.h"
+
+#include <glfw3webgpu.h>
 
 #ifdef WAYLIB_NAMESPACE_NAME
 namespace WAYLIB_NAMESPACE_NAME {
@@ -44,7 +47,7 @@ window_initialization_configuration default_window_initialization_configuration(
 		.always_on_top = false,
 		.transparent_framebuffer = false,
 		.focus_on_show = false,
-		.fullscreen = { 
+		.fullscreen = {
 			.monitor = nullptr,
 			.auto_minimize_when_focus_lost = false,
 			.forcibly_center_cursor = true
@@ -69,7 +72,7 @@ window* create_window(size_t width, size_t height, const char* title /*= "waylib
 	return glfwCreateWindow(width, height, title, config.fullscreen.monitor, nullptr);
 }
 window* create_window(size_t width, size_t height, std::string_view title, window_initialization_configuration config /*= default*/) {
-	return create_window(width, height, title.data(), config); 
+	return create_window(width, height, title.data(), config);
 }
 
 void window_free(window* window) {
@@ -79,6 +82,22 @@ void window_free(window* window) {
 bool window_should_close(window* window, bool should_poll_events /*= true*/) {
 	if(should_poll_events) poll_all_window_events();
 	return glfwWindowShouldClose(window);
+}
+
+wgpu::Surface window_get_surface(window* window, WGPUInstance instance) {
+	return glfwGetWGPUSurface(instance, window);
+}
+wgpu::Surface window_get_surface(window* window, wgpu::Device device) {
+	return glfwGetWGPUSurface(device.getAdapter().getInstance(), window);
+}
+
+create_default_device_from_window_result create_default_device_from_window(window* window, bool prefer_low_power /*= false*/) {
+	WGPUInstance instance = wgpuCreateInstance({});
+	wgpu::Surface surface = window_get_surface(window, instance);
+	return {
+		.device = create_default_device_from_instance(instance, surface, prefer_low_power),
+		.surface = surface
+	};
 }
 
 #ifdef WAYLIB_NAMESPACE_NAME

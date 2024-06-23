@@ -107,6 +107,41 @@ typedef struct image {
 	int format;             // Data format (PixelFormat type)
 } image;
 
+WAYLIB_C_OR_CPP_TYPE(WGPUDevice, wgpu::Device) create_default_device_from_instance(
+	WGPUInstance instance,
+	WGPUSurface surface
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= nullptr
+#endif
+	, bool prefer_low_power
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= false
+#endif
+);
+
+WAYLIB_C_OR_CPP_TYPE(WGPUDevice, wgpu::Device) create_default_device(
+	WGPUSurface surface
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= nullptr
+#endif
+	, bool prefer_low_power
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= false
+#endif
+);
+
+void release_device(
+	WGPUDevice device,
+	bool also_release_adapter
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
+	, bool also_release_instance
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
+);
+
 #ifdef __cplusplus
 } // End extern "C"
 #endif

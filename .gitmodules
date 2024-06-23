@@ -2,7 +2,10 @@
 	path = thirdparty/glm
 	url = https://github.com/g-truc/glm
 	shallow = true
-[submodule "thirdparty/glfw"]
-	path = thirdparty/glfw
-	url = https://github.com/glfw/glfw.git
-	shallow = true
+[submodule "thirdparty/WebGPU-distribution"]
+	path = thirdparty/WebGPU-distribution
+	url = https://github.com/eliemichel/WebGPU-distribution.git
+	branch = dawn
+[submodule "thirdparty/glfw3webgpu"]
+	path = thirdparty/glfw3webgpu
+	url = https://github.com/eliemichel/glfw3webgpu.git

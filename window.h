@@ -20,15 +20,15 @@ typedef struct fullscreen_window_initialization_configuration {
 	; monitor* monitor
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= nullptr
-#endif 
+#endif
 	; bool auto_minimize_when_focus_lost
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= false
-#endif 
+#endif
 	; bool forcibly_center_cursor
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= true
-#endif 
+#endif
 	;
 } fullscreen_window_initialization_configuration;
 
@@ -36,37 +36,42 @@ typedef struct window_initialization_configuration {
 	; bool user_resizable
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= true
-#endif 
+#endif
 	; bool initially_visible
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= true
-#endif 
+#endif
 	; bool initially_focused
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= true
-#endif 
+#endif
 	; bool initially_maximized
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= false
-#endif 
+#endif
 	; bool decorated
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= true
-#endif 
+#endif
 	; bool always_on_top
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= false
-#endif 
+#endif
 	; bool transparent_framebuffer
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= false
-#endif 
+#endif
 	; bool focus_on_show
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= false
-#endif 
+#endif
 	; fullscreen_window_initialization_configuration fullscreen;
 } window_initialization_configuration;
+
+typedef struct create_default_device_from_window_result {
+	WAYLIB_C_OR_CPP_TYPE(WGPUDevice, wgpu::Device) device;
+	WAYLIB_C_OR_CPP_TYPE(WGPUSurface, wgpu::Surface) surface;
+} create_default_device_from_window_result;
 
 
 
@@ -79,8 +84,8 @@ bool poll_all_window_events();
 window_initialization_configuration default_window_initialization_configuration();
 
 window* create_window(
-	size_t width, 
-	size_t height, 
+	size_t width,
+	size_t height,
 	const char* title
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= "waylib"
@@ -100,6 +105,15 @@ bool window_should_close(
 	bool should_poll_events
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= true
+#endif
+);
+
+WAYLIB_C_OR_CPP_TYPE(WGPUSurface, wgpu::Surface) window_get_surface(window* window, WGPUInstance instance);
+
+create_default_device_from_window_result create_default_device_from_window(
+	window* window, bool prefer_low_power
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= false
 #endif
 );
 

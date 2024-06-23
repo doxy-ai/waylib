@@ -5,7 +5,7 @@
 #define GLM_FORCE_SWIZZLE
 #define GLM_FORCE_SIZE_T_LENGTH
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE // Use a clip space with z in [0, 1]
-#define GLM_FORCE_UNRESTRICTED_GENTYPE // Allow more opperations on integers
+#define GLM_FORCE_UNRESTRICTED_GENTYPE // Allow more operations on integers
 #include <glm/vec2.hpp> // glm::vec2
 #include <glm/vec3.hpp> // glm::vec3
 #include <glm/vec4.hpp> // glm::vec4
@@ -14,6 +14,8 @@
 #ifdef WAYLIB_NAMESPACE_NAME
 namespace WAYLIB_NAMESPACE_NAME {
 #endif
+
+using namespace glm;
 
 namespace detail {
 	template<size_t Size, typename Type>
