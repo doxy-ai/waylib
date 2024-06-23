@@ -31,6 +31,13 @@ namespace detail {
 	template<>
 	struct vec_t<4, float> { using type = glm::vec<4, float, glm::defaultp>; };
 
+	template<>
+	struct vec_t<2, int32_t> { using type = glm::vec<2, int32_t, glm::defaultp>; };
+	template<>
+	struct vec_t<3, int32_t> { using type = glm::vec<3, int32_t, glm::defaultp>; };
+	template<>
+	struct vec_t<4, int32_t> { using type = glm::vec<4, int32_t, glm::defaultp>; };
+
 	template<size_t Rows, size_t Cols, typename Type>
 	struct mat_t {
 		static_assert(false, "You are attempting to use a matrix type not supported by WAYLIB!");
@@ -65,6 +72,7 @@ template<typename T>
 using mat4x4 = typename detail::mat_t<4, 4, T>::type;
 
 #define WAYLIB_MATERIALIZE_TYPE(dst, src, constructor) struct dst : public src { using src::constructor; using src::operator=; }
+WAYLIB_MATERIALIZE_TYPE(vec2i, vec2<int32_t>, vec2);
 WAYLIB_MATERIALIZE_TYPE(vec2f, vec2<float>, vec2);
 WAYLIB_MATERIALIZE_TYPE(vec3f, vec3<float>, vec3);
 WAYLIB_MATERIALIZE_TYPE(vec4f, vec4<float>, vec4);

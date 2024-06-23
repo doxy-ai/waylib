@@ -23,27 +23,40 @@ int main() {
 	wl::image image = _image.value;}
 
 	auto window = wl::create_window(800, 600, "waylib");
-	auto [device, surface] = wl::create_default_device_from_window(window);
+	auto state = wl::create_default_device_from_window(window);
 
-	auto uncapturedErrorCallbackHandle = device.setUncapturedErrorCallback([](wgpu::ErrorType type, char const* message) {
+	auto uncapturedErrorCallbackHandle = state.device.setUncapturedErrorCallback([](wgpu::ErrorType type, char const* message) {
 		std::cout << "Uncaptured device error: type " << type;
 		if (message) std::cout << " (" << message << ")";
 		std::cout << std::endl;
 	});
 
-	auto queue = device.getQueue();
+	wl::window_automatically_reconfigure_surface_on_resize(window, state);
+	auto queue = state.device.getQueue();
 
 	std::cout << "Window: " << window << "\n"
-		<< "Instance: " << device.getAdapter().getInstance() << "\n"
-		<< "Adapter: " << device.getAdapter() << "\n"
-		<< "Device: " << device << "\n"
-		<< "Surface: " << surface << "\n"
+		<< "Instance: " << state.device.getAdapter().getInstance() << "\n"
+		<< "Adapter: " << state.device.getAdapter() << "\n"
+		<< "Device: " << state.device << "\n"
+		<< "Surface: " << state.surface << "\n"
 		<< "Queue: " << queue << std::endl;
+	std::cout << state.device.getQueue() << std::endl;
 
-	while(!wl::window_should_close(window)) {}
+	// auto onQueueWorkDone = [](WGPUQueueWorkDoneStatus status, void* /* pUserData */) {
+	// 	std::cout << "Queued work finished with status: " << status << std::endl;
+	// };
+	// wgpuQueueOnSubmittedWorkDone(queue, onQueueWorkDone, nullptr /* pUserData */);
 
-	queue.release();
-	surface.release();
-	wl::release_device(device);
+	while(!wl::window_should_close(window)) {
+		auto _frame = wl::begin_drawing(state, wl::color8bit{229, 25, 51, 255});
+		if(!_frame.has_value) continue;
+		auto& frame = _frame.value;
+		{
+			
+		}
+		wl::end_drawing(state, frame);
+	}
+
+	wl::release_webgpu_state(state);
 	wl::window_free(window);
 }

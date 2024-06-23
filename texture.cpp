@@ -20,13 +20,13 @@ namespace detail {
 		image.data = loader(&image.width, &image.height, &channels);
 		if(image.data == nullptr) {
 			std::cerr << "Error: " << stbi_failure_reason() << std::endl;
-			return {false};
+			return {};
 		}
 
 		if(hdr) image.format = channels == 4 ? image_format::RGBAF32 : image_format::RGBAF32;
 		else image.format = channels == 4 ? image_format::RGBA8 : image_format::RGBA8;
 		image.mipmaps = 0;
-		return {true, image};
+		return image;
 	}
 
 	template<typename F>
@@ -40,12 +40,12 @@ namespace detail {
 				std::cerr << "Error: " << stbi_failure_reason() << std::endl;
 				FreeEXRErrorMessage(err); // release memory of error message.
 			}
-			return {false};
+			return {};
 		}
 
 		image.format = image_format::RGBAF32;
 		image.mipmaps = 0;
-		return {true, image};
+		return image;
 	}
 
 	// std::string get_extension(const char* file_path) {

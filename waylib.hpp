@@ -23,6 +23,9 @@ namespace wgpu {
 
 #include "waylib.h"
 
+wgpu::Color to_webgpu(const wl::color8bit& color);
+wgpu::Color to_webgpu(const wl::color32bit& color);
+
 #ifdef WAYLIB_NAMESPACE_NAME
 }
 #endif

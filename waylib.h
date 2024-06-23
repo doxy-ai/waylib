@@ -14,6 +14,9 @@ typedef struct mat4x4f_ {
 } mat4x4f_;
 
 #ifndef __cplusplus
+typedef struct vec2i {
+	int32_t x, y;
+} vec2i;
 typedef struct vec2f {
 	float x, y;
 } vec2f;
@@ -25,6 +28,7 @@ typedef struct vec4f {
 } vec4f;
 typedef struct mat4x4f_ mat4x4f; // The version we use in the c++ side is quite a bit more advanced
 #else
+struct vec2i;
 struct vec2f;
 struct vec3f;
 struct vec4f;
@@ -125,6 +129,18 @@ typedef struct image {
 	image_format format;    // Data format (PixelFormat type)
 } image;
 
+// Struct holding all of the state needed by webgpu functions
+typedef struct webgpu_state {
+	WAYLIB_C_OR_CPP_TYPE(WGPUDevice, wgpu::Device) device;
+	WAYLIB_C_OR_CPP_TYPE(WGPUSurface, wgpu::Surface) surface;
+} webgpu_state;
+
+typedef struct webgpu_frame_state {
+	WAYLIB_C_OR_CPP_TYPE(WGPUTextureView, wgpu::TextureView) target;
+	WAYLIB_C_OR_CPP_TYPE(WGPUCommandEncoder, wgpu::CommandEncoder) encoder;
+	WAYLIB_C_OR_CPP_TYPE(WGPURenderPassEncoder, wgpu::RenderPassEncoder) render_pass;
+} webgpu_frame_state;
+
 WAYLIB_C_OR_CPP_TYPE(WGPUDevice, wgpu::Device) create_default_device_from_instance(
 	WGPUInstance instance,
 	WGPUSurface surface
@@ -158,6 +174,45 @@ void release_device(
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= true
 #endif
+);
+
+void release_webgpu_state(
+	webgpu_state state
+);
+
+bool configure_surface(
+	webgpu_state state, 
+	vec2i size,
+	WGPUPresentMode present_mode
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= wgpu::PresentMode::Fifo
+#endif  
+	, WGPUCompositeAlphaMode alpha_mode
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= wgpu::CompositeAlphaMode::Auto
+#endif
+);
+
+WAYLIB_OPTIONAL(webgpu_frame_state) begin_drawing_render_texture(
+	webgpu_state state, 
+	WGPUTextureView render_texture,
+	WAYLIB_OPTIONAL(color8bit) clear_color
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
+);
+
+WAYLIB_OPTIONAL(webgpu_frame_state) begin_drawing(
+	webgpu_state state, 
+	WAYLIB_OPTIONAL(color8bit) clear_color
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
+);
+
+void end_drawing(
+	wl::webgpu_state state, 
+	wl::webgpu_frame_state frame
 );
 
 #ifdef __cplusplus

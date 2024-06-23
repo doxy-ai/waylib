@@ -1,5 +1,5 @@
 #pragma once
-#include "config.h"
+#include "waylib.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -69,11 +69,6 @@ typedef struct window_initialization_configuration {
 	; fullscreen_window_initialization_configuration fullscreen;
 } window_initialization_configuration;
 
-typedef struct create_default_device_from_window_result {
-	WAYLIB_C_OR_CPP_TYPE(WGPUDevice, wgpu::Device) device;
-	WAYLIB_C_OR_CPP_TYPE(WGPUSurface, wgpu::Surface) surface;
-} create_default_device_from_window_result;
-
 
 
 monitor* get_primary_monitor();
@@ -111,7 +106,39 @@ bool window_should_close(
 
 WAYLIB_C_OR_CPP_TYPE(WGPUSurface, wgpu::Surface) window_get_surface(window* window, WGPUInstance instance);
 
-create_default_device_from_window_result create_default_device_from_window(
+webgpu_state window_get_webgpu_state(window* window, WGPUDevice device);
+
+bool window_configure_surface(
+	window* window, 
+	webgpu_state state, 
+	WGPUPresentMode present_mode
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= wgpu::PresentMode::Fifo
+#endif  
+	, WGPUCompositeAlphaMode alpha_mode
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= wgpu::CompositeAlphaMode::Auto
+#endif
+);
+
+void window_automatically_reconfigure_surface_on_resize(
+	window* window, 
+	webgpu_state state, 
+	WGPUPresentMode present_mode
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= wgpu::PresentMode::Fifo
+#endif  
+	, WGPUCompositeAlphaMode alpha_mode
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= wgpu::CompositeAlphaMode::Auto
+#endif
+	, bool configure_now
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
+);
+
+webgpu_state create_default_device_from_window(
 	window* window, bool prefer_low_power
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= false

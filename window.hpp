@@ -1,7 +1,6 @@
 #pragma once
 #include <cstdint>
 #include <cstddef>
-// #include <memory>
 #include <string>
 
 #define GLFW_INCLUDE_NONE
