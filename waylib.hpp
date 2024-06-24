@@ -53,6 +53,8 @@ std::string get_error_message_and_clear();
 void set_error_message(const std::string_view view);
 void set_error_message(const std::string& str);
 
+void time_calculations(time& time);
+
 #ifdef WAYLIB_NAMESPACE_NAME
 }
 #endif

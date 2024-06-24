@@ -97,7 +97,7 @@ webgpu_state window_get_webgpu_state(window* window, WGPUDevice _device) {
 
 bool window_configure_surface(
 	window* window, webgpu_state state, 
-	WGPUPresentMode present_mode /*= wgpu::PresentMode::Fifo*/, 
+	WGPUPresentMode present_mode /*= wgpu::PresentMode::Mailbox*/, 
 	WGPUCompositeAlphaMode alpha_mode /*= wgpu::CompositeAlphaMode::Auto*/
 ) {
 	int width, height;
@@ -107,7 +107,7 @@ bool window_configure_surface(
 
 void window_automatically_reconfigure_surface_on_resize(
 	window* window, webgpu_state state, 
-	WGPUPresentMode present_mode /*= wgpu::PresentMode::Fifo*/, 
+	WGPUPresentMode present_mode /*= wgpu::PresentMode::Mailbox*/, 
 	WGPUCompositeAlphaMode alpha_mode /*= wgpu::CompositeAlphaMode::Auto*/, 
 	bool configure_now /*= true*/
 ) {

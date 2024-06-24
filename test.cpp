@@ -47,11 +47,14 @@ int main() {
 	// };
 	// wgpuQueueOnSubmittedWorkDone(queue, onQueueWorkDone, nullptr /* pUserData */);
 
+	wl::time time = {}; 
+
 	while(!wl::window_should_close(window)) {
 		auto frame = wl::promote_null_to_exception(
 			wl::begin_drawing(state, wl::color8bit{229, 25, 51, 255})
 		);
 		{
+			wl::time_calculations(time);
 			
 		}
 		wl::end_drawing(state, frame);

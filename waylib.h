@@ -141,11 +141,19 @@ typedef struct webgpu_frame_state {
 	WAYLIB_C_OR_CPP_TYPE(WGPURenderPassEncoder, wgpu::RenderPassEncoder) render_pass;
 } webgpu_frame_state;
 
+typedef struct time {
+	float since_start;
+	float delta;
+	float average_delta;
+} time;
+
 
 
 const char* get_error_message();
 void set_error_message_raw(const char* message);
 void clear_error_message();
+
+void time_calculations(time* time);
 
 WAYLIB_C_OR_CPP_TYPE(WGPUDevice, wgpu::Device) create_default_device_from_instance(
 	WGPUInstance instance,
@@ -191,7 +199,7 @@ bool configure_surface(
 	vec2i size,
 	WGPUPresentMode present_mode
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
-		= wgpu::PresentMode::Fifo
+		= wgpu::PresentMode::Mailbox
 #endif  
 	, WGPUCompositeAlphaMode alpha_mode
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS

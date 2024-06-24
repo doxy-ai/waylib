@@ -113,7 +113,7 @@ bool window_configure_surface(
 	webgpu_state state, 
 	WGPUPresentMode present_mode
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
-		= wgpu::PresentMode::Fifo
+		= wgpu::PresentMode::Mailbox
 #endif  
 	, WGPUCompositeAlphaMode alpha_mode
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
@@ -126,7 +126,7 @@ void window_automatically_reconfigure_surface_on_resize(
 	webgpu_state state, 
 	WGPUPresentMode present_mode
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
-		= wgpu::PresentMode::Fifo
+		= wgpu::PresentMode::Mailbox
 #endif  
 	, WGPUCompositeAlphaMode alpha_mode
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS

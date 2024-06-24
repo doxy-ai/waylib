@@ -1,6 +1,8 @@
 #define WEBGPU_CPP_IMPLEMENTATION
 #include "waylib.hpp"
 
+#include <chrono>
+
 #ifdef WAYLIB_NAMESPACE_NAME
 namespace WAYLIB_NAMESPACE_NAME {
 #endif
@@ -44,6 +46,21 @@ std::string get_error_message_and_clear() {
 	return out;
 }
 
+void time_calculations(time& time) {
+	constexpr static float alpha = .9;
+	static std::chrono::system_clock::time_point last = std::chrono::system_clock::now();
+
+	auto now = std::chrono::system_clock::now();
+	time.delta = std::chrono::duration_cast<std::chrono::microseconds>(now - last).count() / 1000000.0;
+	time.since_start += time.delta;
+
+	if(std::abs(time.average_delta) < .001) time.average_delta = time.delta;
+	time.average_delta = time.average_delta * alpha + time.delta * (1 - alpha);
+
+	last = now;
+}
+void time_calculations(time* time) { time_calculations(*time); }
+
 wgpu::Device create_default_device_from_instance(WGPUInstance instance, WGPUSurface surface /*= nullptr*/, bool prefer_low_power /*= false*/) {
 	wgpu::RequestAdapterOptions adapterOpts = {};
 	adapterOpts.compatibleSurface = surface;
@@ -84,12 +101,23 @@ void release_webgpu_state(webgpu_state state) {
 	release_device(state.device, true, true);
 }
 
-bool configure_surface(webgpu_state state, vec2i size, WGPUPresentMode present_mode /*= wgpu::PresentMode::Fifo*/, WGPUCompositeAlphaMode alpha_mode /*= wgpu::CompositeAlphaMode::Auto*/) {
+bool configure_surface(webgpu_state state, vec2i size, WGPUPresentMode present_mode /*= wgpu::PresentMode::Mailbox*/, WGPUCompositeAlphaMode alpha_mode /*= wgpu::CompositeAlphaMode::Auto*/) {
 	// Configure the surface
 	wgpu::SurfaceConfiguration config = {};
 
 	wgpu::SurfaceCapabilities capabilities;
 	state.surface.getCapabilities(state.device.getAdapter(), &capabilities); // TODO: Always returns error?
+	
+	bool found = false;
+	for(size_t i = 0; i < capabilities.presentModeCount; ++i)
+		if(capabilities.presentModes[i] == present_mode) {
+			found = true;
+			break;
+		}
+	if(!found) {
+		set_error_message_raw("Desired present mode not available... Falling back to First in First out.");
+		present_mode = wgpu::PresentMode::Fifo; // Fifo
+	}
 	
 	// Configuration of the textures created for the underlying swap chain
 	config.width = size.x;
