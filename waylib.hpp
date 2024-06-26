@@ -1,10 +1,13 @@
 #pragma once
-#include <cstdint>
-#include <cstddef>
-#include <array>
 #include <webgpu/webgpu.hpp>
 
 #include "wgsl_types.hpp"
+
+#include <cstdint>
+#include <cstddef>
+#include <array>
+#include <filesystem>
+#include <set>
 
 #ifdef __cpp_exceptions
 #include <stdexcept>
@@ -27,6 +30,13 @@ namespace wgpu {
 }
 
 #include "waylib.h"
+
+struct shader_preprocessor {
+	std::unordered_map<std::filesystem::path, std::string> file_cache;
+
+	std::set<std::filesystem::path> search_paths;
+	std::string defines = "";
+};
 
 wgpu::Color to_webgpu(const color8bit& color);
 wgpu::Color to_webgpu(const color32bit& color);

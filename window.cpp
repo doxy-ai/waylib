@@ -7,31 +7,41 @@
 namespace WAYLIB_NAMESPACE_NAME {
 #endif
 
-bool glfwInitialized = false;
+namespace detail {
+	bool glfwInitialized = false;
 
-bool maybe_initialize_glfw() {
-	if(!glfwInitialized) {
-		if(!glfwInit())
-			return false;
-		glfwInitialized = true;
+	bool maybe_initialize_glfw() {
+		if(!glfwInitialized) {
+			if(!glfwInit())
+				return false;
+			glfwInitialized = true;
+		}
+		return true;
 	}
-	return true;
 }
 
+//////////////////////////////////////////////////////////////////////
+// #Monitor
+//////////////////////////////////////////////////////////////////////
+
 monitor* get_primary_monitor() {
-	if(!maybe_initialize_glfw()) return nullptr;
+	if(!detail::maybe_initialize_glfw()) return nullptr;
 	return glfwGetPrimaryMonitor();
 }
 
+//////////////////////////////////////////////////////////////////////
+// #Window
+//////////////////////////////////////////////////////////////////////
+
 void close_all_windows() {
-	if(glfwInitialized) {
+	if(detail::glfwInitialized) {
 		glfwTerminate();
-		glfwInitialized = false;
+		detail::glfwInitialized = false;
 	}
 }
 
 bool poll_all_window_events() {
-	if(!glfwInitialized) return false;
+	if(!detail::glfwInitialized) return false;
 	glfwPollEvents();
 	return true;
 }
@@ -55,7 +65,7 @@ window_initialization_configuration default_window_initialization_configuration(
 }
 
 window* create_window(size_t width, size_t height, const char* title /*= "waylib"*/, window_initialization_configuration config /*= default*/) {
-	if(!maybe_initialize_glfw()) return nullptr;
+	if(!detail::maybe_initialize_glfw()) return nullptr;
 
 	glfwWindowHint(GLFW_RESIZABLE, config.user_resizable);
 	glfwWindowHint(GLFW_VISIBLE, config.initially_visible);

@@ -5,6 +5,8 @@
 extern "C" {
 #endif
 
+struct shader_preprocessor;
+
 // Define mathematical types used... in C++ they are provided by glm so we just prototype them here!
 typedef struct mat4x4f_ {
 	float a0, a1, a2, a3;
@@ -187,6 +189,26 @@ typedef struct surface_configuration {
 	;
 } surface_configuration;
 
+struct preprocess_shader_config {
+	bool remove_comments
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= false
+#endif
+	; bool remove_whitespace
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= false
+#endif
+	; bool support_pragma_once
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
+	; const char* path
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= nullptr
+#endif
+	;
+};
+
 typedef struct create_shader_configuration {
 	const char* compute_entry_point
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
@@ -203,6 +225,11 @@ typedef struct create_shader_configuration {
 	; const char* name
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= nullptr
+#endif
+	; shader_preprocessor* preprocessor
+	; preprocess_shader_config preprocess_config
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
 #endif
 	;
 } create_shader_configuration;
@@ -265,7 +292,57 @@ bool configure_surface(
 #endif
 );
 
-shader create_shader(
+shader_preprocessor* create_shader_preprocessor();
+
+void release_shader_preprocessor(
+	shader_preprocessor* processor
+);
+
+void preprocessor_add_define(
+	shader_preprocessor* processor, 
+	const char* name, 
+	const char* value
+);
+
+bool preprocessor_add_search_path(
+	shader_preprocessor* processor, 
+	const char* _path
+);
+
+const char* preprocessor_get_cached_file(
+	shader_preprocessor* processor, 
+	const char* path
+);
+
+const char* preprocess_shader_from_memory(
+	shader_preprocessor* processor, 
+	const char* data, 
+	preprocess_shader_config config
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
+);
+
+const char* preprocess_shader_from_memory_and_cache(
+	shader_preprocessor* processor, 
+	const char* data, 
+	const char* path, 
+	preprocess_shader_config config
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
+);
+
+const char* preprocess_shader(
+	shader_preprocessor* processor, 
+	const char* path, 
+	preprocess_shader_config config
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
+);
+
+WAYLIB_OPTIONAL(shader) create_shader(
 	webgpu_state state,
 	const char* wgsl_source_code,
 	create_shader_configuration config

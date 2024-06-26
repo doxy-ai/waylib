@@ -234,7 +234,9 @@ namespace detail {
 }
 
 
-
+//////////////////////////////////////////////////////////////////////
+// #Mesh
+//////////////////////////////////////////////////////////////////////
 
 void mesh_upload(webgpu_state state, mesh& mesh) {
 	size_t biggest = std::max(mesh.vertexCount * sizeof(vec4f), mesh.triangleCount * sizeof(index_t) * 3);
@@ -300,6 +302,10 @@ void mesh_upload(webgpu_state state, mesh* mesh) {
 	mesh_upload(state, *mesh);
 }
 
+//////////////////////////////////////////////////////////////////////
+// #Material
+//////////////////////////////////////////////////////////////////////
+
 void material_upload(webgpu_state state, material& material) {
 	// Create the render pipeline
 	wgpu::RenderPipelineDescriptor pipelineDesc;
@@ -362,6 +368,10 @@ material create_material(webgpu_state state, std::span<shader> shaders) {
 material create_material(webgpu_state state, shader& shader) {
 	return create_material(state, &shader, 1);
 }
+
+//////////////////////////////////////////////////////////////////////
+// #Model
+//////////////////////////////////////////////////////////////////////
 
 model_process_configuration default_model_process_configuration() {
 	return {}; // TODO: Expand
