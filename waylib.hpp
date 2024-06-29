@@ -38,8 +38,8 @@ struct shader_preprocessor {
 	std::string defines = "";
 };
 
-wgpu::Color to_webgpu(const color8bit& color);
-wgpu::Color to_webgpu(const color32bit& color);
+// wgpu::Color to_webgpu(const color8bit& color);
+wgpu::Color to_webgpu(const color& color);
 
 std::string get_error_message_and_clear();
 #ifdef __cpp_exceptions

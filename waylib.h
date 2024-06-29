@@ -38,12 +38,12 @@ struct mat4x4f;
 #endif
 
 typedef struct {
-	unsigned char r, g, b, a;
-} color8bit;
-
-typedef struct {
 	float r, g, b, a;
-} color32bit;
+} color;
+
+// typedef struct {
+// 	unsigned char r, g, b, a;
+// } color8bit;
 
 
 // Shader stages
@@ -84,19 +84,19 @@ typedef struct mesh {
 	index_t triangleCount;     // Number of triangles stored (indexed or not)
 
 	// Vertex attributes data
-	vec3f* positions;         // Vertex position (shader-location = 0)
-	vec2f* texcoords;         // Vertex texture coordinates (shader-location = 1)
-	vec2f* texcoords2;        // Vertex texture second coordinates (shader-location = 5)
-	vec3f* normals;           // Vertex normals (shader-location = 2)
-	vec4f* tangents;          // Vertex tangents (shader-location = 4)
-	color8bit* colors;        // Vertex colors (shader-location = 3)
-	index_t* indices;         // Vertex indices (in case vertex data comes indexed)
+	vec3f* positions;          // Vertex position (shader-location = 0)
+	vec2f* texcoords;          // Vertex texture coordinates (shader-location = 1)
+	vec2f* texcoords2;         // Vertex texture second coordinates (shader-location = 5)
+	vec3f* normals;            // Vertex normals (shader-location = 2)
+	vec4f* tangents;           // Vertex tangents (shader-location = 4)
+	color* colors;             // Vertex colors (shader-location = 3)
+	index_t* indices;          // Vertex indices (in case vertex data comes indexed)
 
 	// Animation vertex data
-	vec3f* anim_vertices;     // Animated vertex positions (after bones transformations)
-	vec3f* anim_normals;      // Animated normals (after bones transformations)
-	unsigned char* bone_ids;  // Vertex bone ids, max 255 bone ids, up to 4 bones influence by vertex (skinning)
-	vec4f* bone_weights;      // Vertex bone weight, up to 4 bones influence by vertex (skinning)
+	vec3f* anim_vertices;      // Animated vertex positions (after bones transformations)
+	vec3f* anim_normals;       // Animated normals (after bones transformations)
+	unsigned char* bone_ids;   // Vertex bone ids, max 255 bone ids, up to 4 bones influence by vertex (skinning)
+	vec4f* bone_weights;       // Vertex bone weight, up to 4 bones influence by vertex (skinning)
 
 	WAYLIB_C_OR_CPP_TYPE(WGPUBuffer, wgpu::Buffer) buffer; // Pointer to the data on the gpu
 	WAYLIB_C_OR_CPP_TYPE(WGPUBuffer, wgpu::Buffer) indexBuffer; // Pointer to the index data on the gpu
@@ -135,23 +135,23 @@ typedef struct model {
 } model;
 
 // Format of the data stored in the image
-WAYLIB_ENUM image_format {
-	C_PREPEND(IMAGE_FORMAT_, RGBA8) = 0,
-	// C_PREPEND(IMAGE_FORMAT_, RGB8),
-	// C_PREPEND(IMAGE_FORMAT_, Gray8),
-	C_PREPEND(IMAGE_FORMAT_, RGBAF32),
-	// C_PREPEND(IMAGE_FORMAT_, RGBF32),
-	// C_PREPEND(IMAGE_FORMAT_, Gray32),
-};
+// WAYLIB_ENUM image_format {
+// 	C_PREPEND(IMAGE_FORMAT_, RGBA8) = 0,
+// 	// C_PREPEND(IMAGE_FORMAT_, RGB8),
+// 	// C_PREPEND(IMAGE_FORMAT_, Gray8),
+// 	C_PREPEND(IMAGE_FORMAT_, RGBAF32),
+// 	// C_PREPEND(IMAGE_FORMAT_, RGBF32),
+// 	// C_PREPEND(IMAGE_FORMAT_, Gray32),
+// };
 
 // Image, pixel data stored in CPU memory (RAM)
 // From: raylib.h
 typedef struct image {
-	void* data;             // Image raw data
+	color* data;            // Image raw data
 	int width;              // Image base width
 	int height;             // Image base height
 	int mipmaps;            // Mipmap levels, 1 by default
-	image_format format;    // Data format (PixelFormat type)
+	// image_format format;    // Data format (PixelFormat type)
 } image;
 
 // Struct holding all of the state needed by webgpu functions
@@ -354,7 +354,7 @@ WAYLIB_OPTIONAL(shader) create_shader(
 WAYLIB_OPTIONAL(webgpu_frame_state) begin_drawing_render_texture(
 	webgpu_state state,
 	WGPUTextureView render_texture,
-	WAYLIB_OPTIONAL(color8bit) clear_color
+	WAYLIB_OPTIONAL(color) clear_color
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
 #endif
@@ -362,7 +362,7 @@ WAYLIB_OPTIONAL(webgpu_frame_state) begin_drawing_render_texture(
 
 WAYLIB_OPTIONAL(webgpu_frame_state) begin_drawing(
 	webgpu_state state,
-	WAYLIB_OPTIONAL(color8bit) clear_color
+	WAYLIB_OPTIONAL(color) clear_color
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
 #endif

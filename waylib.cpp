@@ -11,16 +11,16 @@
 namespace WAYLIB_NAMESPACE_NAME {
 #endif
 
-wgpu::Color to_webgpu(const color8bit& color) {
-	wgpu::Color out;
-	out.r = float(color.r) / 255;
-	out.g = float(color.g) / 255;
-	out.b = float(color.b) / 255;
-	out.a = float(color.a) / 255;
-	return out;
-}
+// wgpu::Color to_webgpu(const color8bit& color) {
+// 	wgpu::Color out;
+// 	out.r = float(color.r) / 255;
+// 	out.g = float(color.g) / 255;
+// 	out.b = float(color.b) / 255;
+// 	out.a = float(color.a) / 255;
+// 	return out;
+// }
 
-wgpu::Color to_webgpu(const color32bit& color) {
+wgpu::Color to_webgpu(const color& color) {
 	return {color.r, color.g, color.b, color.a};
 }
 
@@ -366,7 +366,7 @@ WAYLIB_OPTIONAL(shader) create_shader(webgpu_state state, const char* wgsl_sourc
 // #Begin/End Drawing
 //////////////////////////////////////////////////////////////////////
 
-WAYLIB_OPTIONAL(webgpu_frame_state) begin_drawing_render_texture(webgpu_state state, WGPUTextureView render_texture, WAYLIB_OPTIONAL(color8bit) clear_color /*= {}*/) {
+WAYLIB_OPTIONAL(webgpu_frame_state) begin_drawing_render_texture(webgpu_state state, WGPUTextureView render_texture, WAYLIB_OPTIONAL(color) clear_color /*= {}*/) {
 	// Create a command encoder for the draw call
 	wgpu::CommandEncoderDescriptor encoderDesc = {};
 	encoderDesc.label = "Waylib Command Encoder";
@@ -381,7 +381,7 @@ WAYLIB_OPTIONAL(webgpu_frame_state) begin_drawing_render_texture(webgpu_state st
 	renderPassColorAttachment.resolveTarget = nullptr;
 	renderPassColorAttachment.loadOp = clear_color.has_value ? wgpu::LoadOp::Clear : wgpu::LoadOp::Load;
 	renderPassColorAttachment.storeOp = wgpu::StoreOp::Store;
-	renderPassColorAttachment.clearValue = to_webgpu(clear_color.has_value ? clear_color.value : color8bit{0, 0, 0, 0});
+	renderPassColorAttachment.clearValue = to_webgpu(clear_color.has_value ? clear_color.value : color{0, 0, 0, 0});
 	renderPassColorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
 
 	renderPassDesc.colorAttachmentCount = 1;
@@ -394,7 +394,7 @@ WAYLIB_OPTIONAL(webgpu_frame_state) begin_drawing_render_texture(webgpu_state st
 	return webgpu_frame_state{render_texture, encoder, renderPass};
 }
 
-WAYLIB_OPTIONAL(webgpu_frame_state) begin_drawing(webgpu_state state, WAYLIB_OPTIONAL(color8bit) clear_color /*= {}*/) {
+WAYLIB_OPTIONAL(webgpu_frame_state) begin_drawing(webgpu_state state, WAYLIB_OPTIONAL(color) clear_color /*= {}*/) {
 	// Get the surface texture
 	wgpu::SurfaceTexture surfaceTexture;
 	state.surface.getCurrentTexture(&surfaceTexture);

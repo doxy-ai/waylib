@@ -1,4 +1,5 @@
 #include "model.hpp"
+#include "waylib.h"
 
 #include <glm/ext/matrix_transform.hpp>
 
@@ -15,12 +16,8 @@ namespace detail {
 		return vec3f{vec.x, vec.y, vec.z};
 	}
 
-	inline color8bit fromAssimp(aiColor4D col) {
-		uint8_t r = std::round(col.r * 255);
-		uint8_t g = std::round(col.g * 255);
-		uint8_t b = std::round(col.b * 255);
-		uint8_t a = std::round(col.a * 255);
-		return color8bit{r, g, b, a};
+	inline color fromAssimp(aiColor4D col) {
+		return color{col.r, col.g, col.b, col.a};
 	}
 
 	mesh fromAssimp(const aiMesh* aiMesh) {
@@ -33,7 +30,7 @@ namespace detail {
 		if(aiMesh->HasTangentsAndBitangents()) m.tangents = new vec4f[m.vertexCount];
 		if(aiMesh->HasTextureCoords(0)) m.texcoords = new vec2f[m.vertexCount];
 		if(aiMesh->HasTextureCoords(1)) m.texcoords2 = new vec2f[m.vertexCount];
-		if(aiMesh->HasVertexColors(0)) m.colors = new color8bit[m.vertexCount];
+		if(aiMesh->HasVertexColors(0)) m.colors = new color[m.vertexCount];
 
 		for (unsigned int j = 0; j < aiMesh->mNumVertices; ++j) {
 			if(m.positions) m.positions[j] = fromAssimp(aiMesh->mVertices[j]);
@@ -173,12 +170,12 @@ namespace detail {
 		};
 
 		static WGPUVertexAttribute colorAttribute = {
-			.format = wgpu::VertexFormat::Uint8x4,
+			.format = wgpu::VertexFormat::Float32x4,
 			.offset = 0,
 			.shaderLocation = 3,
 		};
 		static WGPUVertexBufferLayout colorLayout = {
-			.arrayStride = sizeof(color8bit),
+			.arrayStride = sizeof(color),
 			.stepMode = wgpu::VertexStepMode::Vertex,
 			.attributeCount = 1,
 			.attributes = &colorAttribute,
@@ -247,7 +244,7 @@ void mesh_upload(webgpu_state state, mesh& mesh) {
 	bufferDesc.size = mesh.vertexCount * sizeof(vec2f) * 2
 		+ mesh.vertexCount * sizeof(vec3f) * 2
 		+ mesh.vertexCount * sizeof(vec4f) * 1
-		+ mesh.vertexCount * sizeof(color8bit) * 1;
+		+ mesh.vertexCount * sizeof(color) * 1;
 	bufferDesc.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Vertex; // Vertex usage here!
 	bufferDesc.mappedAtCreation = false;
 	if(mesh.buffer) mesh.buffer.release();
@@ -283,8 +280,8 @@ void mesh_upload(webgpu_state state, mesh& mesh) {
 	}
 	{ // Colors
 		void* data = mesh.colors ? (void*)mesh.colors : (void*)zeroBuffer.data();
-		queue.writeBuffer(mesh.buffer, currentOffset, data, mesh.vertexCount * sizeof(color8bit));
-		currentOffset += mesh.vertexCount * sizeof(color8bit);
+		queue.writeBuffer(mesh.buffer, currentOffset, data, mesh.vertexCount * sizeof(color));
+		currentOffset += mesh.vertexCount * sizeof(color);
 	}
 	if(mesh.indices) {
 		wgpu::BufferDescriptor bufferDesc;
@@ -449,8 +446,8 @@ void model_draw(webgpu_frame_state frame, model& model) {
 			currentOffset += mesh.vertexCount * sizeof(vec4f);
 		}
 		{ // Colors
-			frame.render_pass.setVertexBuffer(3, mesh.buffer, currentOffset, mesh.vertexCount * sizeof(color8bit));
-			currentOffset += mesh.vertexCount * sizeof(color8bit);
+			frame.render_pass.setVertexBuffer(3, mesh.buffer, currentOffset, mesh.vertexCount * sizeof(color));
+			currentOffset += mesh.vertexCount * sizeof(color);
 		}
 
 		if(mesh.indexBuffer) {

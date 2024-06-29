@@ -52,6 +52,7 @@ int main() {
 
 	wl::shader_preprocessor* p = wl::create_shader_preprocessor();
 	// wl::preprocessor_add_define(p, "flip", "1");
+	auto texture = wl::load_image("../test.png");
 
 	// Load the shader module
 	wl::model model = wl::throw_if_null(wl::load_model(state, "../tri.obj"));
@@ -79,13 +80,11 @@ int main() {
 	std::cout << res << std::endl;
 	std::cout << wl::preprocessor_get_cached_file(p, "/virtual/bob.wgsl") << std::endl;
 
-	wl::release_shader_preprocessor(p);
-
 	wl::time time = {};
 	while(!wl::window_should_close(window)) {
 		wl::time_calculations(time);
 		auto frame = wl::throw_if_null(
-			wl::begin_drawing(state, wl::color8bit{229, 25, 51, 255})
+			wl::begin_drawing(state, wl::color{0.9, .1,  0.2, 1})
 		);
 		{
 			wl::model_draw(frame, model);
@@ -93,6 +92,7 @@ int main() {
 		wl::end_drawing(state, frame);
 	}
 
+	wl::release_shader_preprocessor(p);
 	wl::release_webgpu_state(state);
 	wl::release_window(window);
 }
