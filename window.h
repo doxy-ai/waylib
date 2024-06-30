@@ -109,32 +109,20 @@ WAYLIB_C_OR_CPP_TYPE(WGPUSurface, wgpu::Surface) window_get_surface(window* wind
 webgpu_state window_get_webgpu_state(window* window, WGPUDevice device);
 
 bool window_configure_surface(
-	window* window, 
-	webgpu_state state, 
-	WGPUPresentMode present_mode
+	window* window,
+	webgpu_state state,
+	surface_configuration config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
-		= wgpu::PresentMode::Mailbox
-#endif  
-	, WGPUCompositeAlphaMode alpha_mode
-#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
-		= wgpu::CompositeAlphaMode::Auto
+		= {}
 #endif
 );
 
 void window_automatically_reconfigure_surface_on_resize(
-	window* window, 
-	webgpu_state state, 
-	WGPUPresentMode present_mode
+	window* window,
+	webgpu_state state,
+	surface_configuration config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
-		= wgpu::PresentMode::Mailbox
-#endif  
-	, WGPUCompositeAlphaMode alpha_mode
-#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
-		= wgpu::CompositeAlphaMode::Auto
-#endif
-	, bool configure_now
-#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
-		= true
+		= {}
 #endif
 );
 

@@ -96,38 +96,34 @@ webgpu_state window_get_webgpu_state(window* window, WGPUDevice _device) {
 }
 
 bool window_configure_surface(
-	window* window, webgpu_state state, 
-	WGPUPresentMode present_mode /*= wgpu::PresentMode::Mailbox*/, 
-	WGPUCompositeAlphaMode alpha_mode /*= wgpu::CompositeAlphaMode::Auto*/
+	window* window, webgpu_state state,
+	surface_configuration config /*= {}*/
 ) {
 	int width, height;
 	glfwGetWindowSize(window, &width, &height);
-	return configure_surface(state, vec2i{width, height}, present_mode, alpha_mode);
+	return configure_surface(state, vec2i{width, height}, config);
 }
 
 void window_automatically_reconfigure_surface_on_resize(
-	window* window, webgpu_state state, 
-	WGPUPresentMode present_mode /*= wgpu::PresentMode::Mailbox*/, 
-	WGPUCompositeAlphaMode alpha_mode /*= wgpu::CompositeAlphaMode::Auto*/, 
-	bool configure_now /*= true*/
+	window* window, webgpu_state state,
+	surface_configuration config /*= {}*/
 ) {
 	struct ResizeData {
 		char magic[5] = "ReDa";
 		webgpu_state state;
-		WGPUPresentMode present_mode;
-		WGPUCompositeAlphaMode alpha_mode;
+		surface_configuration config;
 	};
 
-	if(configure_now) window_configure_surface(window, state, present_mode, alpha_mode);
-	
+	if(config.automatic_should_configure_now) window_configure_surface(window, state, config);
+
 	if(auto data = (ResizeData*)glfwGetWindowUserPointer(window); data && std::string_view(data->magic) == "ReDa")
 		delete data;
 
-	glfwSetWindowUserPointer(window, new ResizeData{"ReDa", state, present_mode, alpha_mode});
+	glfwSetWindowUserPointer(window, new ResizeData{"ReDa", state, config});
 	glfwSetWindowSizeCallback(window, [](GLFWwindow* window, int width, int height) {
 		auto data = (ResizeData*)glfwGetWindowUserPointer(window);
 		if(data && std::string_view(data->magic) == "ReDa")
-			configure_surface(data->state, vec2i{width, height}, data->present_mode, data->alpha_mode);
+			configure_surface(data->state, vec2i{width, height}, data->config);
 	});
 }
 

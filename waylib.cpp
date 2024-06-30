@@ -37,8 +37,8 @@ void set_error_message(const std::string& str) {
 	error_message = str;
 }
 
-void clear_error_message() { 
-	set_error_message_raw(""); 
+void clear_error_message() {
+	set_error_message_raw("");
 }
 std::string get_error_message_and_clear() {
 	std::string out = get_error_message();
@@ -60,6 +60,18 @@ void time_calculations(time& time) {
 	last = now;
 }
 void time_calculations(time* time) { time_calculations(*time); }
+
+void process_wgpu_events([[maybe_unused]] Device device, [[maybe_unused]] bool yieldToWebBrowser = true) {
+#if defined(WEBGPU_BACKEND_DAWN)
+    device.tick();
+// #elif defined(WEBGPU_BACKEND_WGPU)
+//     device.poll(false);
+#elif defined(WEBGPU_BACKEND_EMSCRIPTEN)
+    if (yieldToWebBrowser) {
+        emscripten_sleep(10);
+    }
+#endif
+}
 
 wgpu::Device create_default_device_from_instance(WGPUInstance instance, WGPUSurface surface /*= nullptr*/, bool prefer_low_power /*= false*/) {
 	wgpu::RequestAdapterOptions adapterOpts = {};
@@ -101,39 +113,64 @@ void release_webgpu_state(webgpu_state state) {
 	release_device(state.device, true, true);
 }
 
-bool configure_surface(webgpu_state state, vec2i size, WGPUPresentMode present_mode /*= wgpu::PresentMode::Mailbox*/, WGPUCompositeAlphaMode alpha_mode /*= wgpu::CompositeAlphaMode::Auto*/) {
+bool configure_surface(webgpu_state state, vec2i size, surface_configuration config /*= {}*/) {
 	// Configure the surface
-	wgpu::SurfaceConfiguration config = {};
+	wgpu::SurfaceConfiguration descriptor = {};
 
 	wgpu::SurfaceCapabilities capabilities;
 	state.surface.getCapabilities(state.device.getAdapter(), &capabilities); // TODO: Always returns error?
-	
+
 	bool found = false;
 	for(size_t i = 0; i < capabilities.presentModeCount; ++i)
-		if(capabilities.presentModes[i] == present_mode) {
+		if(capabilities.presentModes[i] == config.presentaion_mode) {
 			found = true;
 			break;
 		}
 	if(!found) {
 		set_error_message_raw("Desired present mode not available... Falling back to First in First out.");
-		present_mode = wgpu::PresentMode::Fifo; // Fifo
+		config.presentaion_mode = wgpu::PresentMode::Fifo; // Fifo
 	}
-	
+
 	// Configuration of the textures created for the underlying swap chain
-	config.width = size.x;
-	config.height = size.y;
-	config.usage = wgpu::TextureUsage::RenderAttachment;
-	config.format = capabilities.formats[0];
+	descriptor.width = size.x;
+	descriptor.height = size.y;
+	descriptor.usage = wgpu::TextureUsage::RenderAttachment;
+	descriptor.format = capabilities.formats[0];
 
 	// And we do not need any particular view format:
-	config.viewFormatCount = 0;
-	config.viewFormats = nullptr;
-	config.device = state.device;
-	config.presentMode = present_mode;
-	config.alphaMode = alpha_mode;
+	descriptor.viewFormatCount = 0;
+	descriptor.viewFormats = nullptr;
+	descriptor.device = state.device;
+	descriptor.presentMode = config.presentaion_mode;
+	descriptor.alphaMode = config.alpha_mode;
 
-	state.surface.configure(config);
+	state.surface.configure(descriptor);
 	return true;
+}
+
+shader create_shader(webgpu_state state, const char* wgsl_source_code, create_shader_configuration config /*= {}*/) {
+	wgpu::ShaderModuleDescriptor shaderDesc;
+	shaderDesc.label = config.name;
+#ifdef WEBGPU_BACKEND_WGPU
+	shaderDesc.hintCount = 0;
+	shaderDesc.hints = nullptr;
+#endif
+
+	// We use the extension mechanism to specify the WGSL part of the shader module descriptor
+	wgpu::ShaderModuleWGSLDescriptor shaderCodeDesc;
+	// Set the chained struct's header
+	shaderCodeDesc.chain.next = nullptr;
+	shaderCodeDesc.chain.sType = wgpu::SType::ShaderModuleWGSLDescriptor;
+	// Connect the chain
+	shaderDesc.nextInChain = &shaderCodeDesc.chain;
+	shaderCodeDesc.code = wgsl_source_code;
+
+	return {
+		.compute_entry_point = config.compute_entry_point,
+		.vertex_entry_point = config.vertex_entry_point,
+		.fragment_entry_point = config.fragment_entry_point,
+		.module = state.device.createShaderModule(shaderDesc)
+	};
 }
 
 WAYLIB_OPTIONAL(webgpu_frame_state) begin_drawing_render_texture(webgpu_state state, WGPUTextureView render_texture, WAYLIB_OPTIONAL(color8bit) clear_color /*= {}*/) {

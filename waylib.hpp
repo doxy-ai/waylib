@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <cstddef>
+#include <array>
 #include <webgpu/webgpu.hpp>
 
 #include "wgsl_types.hpp"
@@ -27,8 +28,8 @@ namespace wgpu {
 
 #include "waylib.h"
 
-wgpu::Color to_webgpu(const wl::color8bit& color);
-wgpu::Color to_webgpu(const wl::color32bit& color);
+wgpu::Color to_webgpu(const color8bit& color);
+wgpu::Color to_webgpu(const color32bit& color);
 
 std::string get_error_message_and_clear();
 #ifdef __cpp_exceptions
@@ -37,7 +38,7 @@ std::string get_error_message_and_clear();
 	};
 
 	template<typename T>
-	T promote_null_to_exception(const WAYLIB_OPTIONAL(T)& opt) {
+	T throw_if_null(const WAYLIB_OPTIONAL(T)& opt) {
 		if(opt.has_value) return opt.value;
 
 		auto msg = get_error_message_and_clear();
@@ -45,7 +46,7 @@ std::string get_error_message_and_clear();
 	}
 #else
 	template<typename T>
-	T promote_null_to_exception(const WAYLIB_OPTIONAL(T)& opt) {
+	T throw_if_null(const WAYLIB_OPTIONAL(T)& opt) {
 		assert(opt.has_value, get_error_message());
 		return opt.value;
 	}

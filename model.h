@@ -76,12 +76,31 @@ typedef struct model_process_configuration {
 	; model_process_optimization_configuration optimize;
 } model_process_configuration;
 
+void mesh_upload(
+	webgpu_state state,
+	mesh* mesh
+);
 
+void material_upload(
+	webgpu_state state,
+	material* material
+);
 
+material create_material(
+	webgpu_state state,
+	shader* shaders,
+	size_t shader_count
+);
 
 model_process_configuration default_model_process_configuration();
 
+void model_upload(
+	webgpu_state state,
+	model* model
+);
+
 WAYLIB_OPTIONAL(model) load_model(
+	webgpu_state state,
 	const char * file_path,
 	model_process_configuration config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
@@ -90,11 +109,17 @@ WAYLIB_OPTIONAL(model) load_model(
 );
 
 WAYLIB_OPTIONAL(model) load_model_from_memory(
+	webgpu_state state,
 	const unsigned char* data, size_t size,
 	model_process_configuration config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= default_model_process_configuration()
 #endif
+);
+
+void model_draw(
+	webgpu_frame_state frame,
+	model* model
 );
 
 #ifdef __cplusplus

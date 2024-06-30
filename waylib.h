@@ -44,14 +44,40 @@ typedef struct {
 } color32bit;
 
 
-// Shader 
+// Shader stages
+WAYLIB_ENUM shader_stage {
+	C_PREPEND(SHADER_STAGE_, Compute) = 0,
+	C_PREPEND(SHADER_STAGE_, Vertex),
+	C_PREPEND(SHADER_STAGE_, Fragment),
+	// TODO: Add
+	C_PREPEND(SHADER_STAGE_, Max),
+};
+#define WAYLIB_SHADER_STAGE_COUNT WAYLIB_C_OR_CPP_TYPE(SHADER_STAGE_max, (index_t)shader_stage::Max)
+
+// Shader
 typedef struct shader {
-	
+	bool waylib_heap_allocated;// Wether or not this mesh is stored on the heap and should be automatically cleaned up
+	// unsigned char* source;
+	// size_t source_size;
+
+	const char* compute_entry_point;
+	const char* vertex_entry_point;
+	const char* fragment_entry_point;
+	WAYLIB_C_OR_CPP_TYPE(WGPUShaderModule, wgpu::ShaderModule) module;
 } shader;
+
+// Material
+typedef struct material {
+	bool waylib_heap_allocated;// Wether or not this mesh is stored on the heap and should be automatically cleaned up
+	index_t shaderCount;
+	shader* shaders;
+	WAYLIB_C_OR_CPP_TYPE(WGPURenderPipeline, wgpu::RenderPipeline) pipeline;
+} material;
 
 // Mesh, vertex data
 // From: raylib.h
 typedef struct mesh {
+	bool waylib_heap_allocated;// Wether or not this mesh is stored on the heap and should be automatically cleaned up
 	index_t vertexCount;       // Number of vertices stored in arrays
 	index_t triangleCount;     // Number of triangles stored (indexed or not)
 
@@ -69,13 +95,10 @@ typedef struct mesh {
 	vec3f* anim_normals;      // Animated normals (after bones transformations)
 	unsigned char* bone_ids;  // Vertex bone ids, max 255 bone ids, up to 4 bones influence by vertex (skinning)
 	vec4f* bone_weights;      // Vertex bone weight, up to 4 bones influence by vertex (skinning)
-} mesh;
 
-// 
-// From: raylib.h
-typedef struct material {
-	/*What should go here?*/
-} material;
+	WAYLIB_C_OR_CPP_TYPE(WGPUBuffer, wgpu::Buffer) buffer; // Pointer to the data on the gpu
+	WAYLIB_C_OR_CPP_TYPE(WGPUBuffer, wgpu::Buffer) indexBuffer; // Pointer to the index data on the gpu
+} mesh;
 
 // Bone, skeletal animation bone
 // From: raylib.h
@@ -148,6 +171,45 @@ typedef struct time {
 } time;
 
 
+typedef struct surface_configuration {
+	WGPUPresentMode presentaion_mode
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= wgpu::PresentMode::Mailbox
+#endif
+	; WGPUCompositeAlphaMode alpha_mode
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= wgpu::CompositeAlphaMode::Auto
+#endif
+	; bool automatic_should_configure_now
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
+	;
+} surface_configuration;
+
+typedef struct create_shader_configuration {
+	const char* compute_entry_point
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= nullptr
+#endif
+	; const char* vertex_entry_point
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= nullptr
+#endif
+	; const char* fragment_entry_point
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= nullptr
+#endif
+	; const char* name
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= nullptr
+#endif
+	;
+} create_shader_configuration;
+
+
+
+
 
 const char* get_error_message();
 void set_error_message_raw(const char* message);
@@ -195,20 +257,25 @@ void release_webgpu_state(
 );
 
 bool configure_surface(
-	webgpu_state state, 
+	webgpu_state state,
 	vec2i size,
-	WGPUPresentMode present_mode
+	surface_configuration config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
-		= wgpu::PresentMode::Mailbox
-#endif  
-	, WGPUCompositeAlphaMode alpha_mode
+		= {}
+#endif
+);
+
+shader create_shader(
+	webgpu_state state,
+	const char* wgsl_source_code,
+	create_shader_configuration config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
-		= wgpu::CompositeAlphaMode::Auto
+		= {}
 #endif
 );
 
 WAYLIB_OPTIONAL(webgpu_frame_state) begin_drawing_render_texture(
-	webgpu_state state, 
+	webgpu_state state,
 	WGPUTextureView render_texture,
 	WAYLIB_OPTIONAL(color8bit) clear_color
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
@@ -217,7 +284,7 @@ WAYLIB_OPTIONAL(webgpu_frame_state) begin_drawing_render_texture(
 );
 
 WAYLIB_OPTIONAL(webgpu_frame_state) begin_drawing(
-	webgpu_state state, 
+	webgpu_state state,
 	WAYLIB_OPTIONAL(color8bit) clear_color
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
@@ -225,8 +292,8 @@ WAYLIB_OPTIONAL(webgpu_frame_state) begin_drawing(
 );
 
 void end_drawing(
-	wl::webgpu_state state, 
-	wl::webgpu_frame_state frame
+	webgpu_state state,
+	webgpu_frame_state frame
 );
 
 #ifdef __cplusplus

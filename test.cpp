@@ -4,23 +4,22 @@
 
 #include <iostream>
 
+const char* shaderSource = R"(
+@vertex
+fn vertex(@location(0) in_vertex_position: vec3f) -> @builtin(position) vec4f {
+    return vec4f(in_vertex_position.xzy, 1.0);
+}
+
+@fragment
+fn fragment() -> @location(0) vec4f {
+	return vec4f(0.0, 0.4, 1.0, 1.0);
+})";
+
 int main() {
 	constexpr auto y = wl::vec3f(5);
 	auto x = y.xx();
 	// y.xy();
 	std::cout << x.x << ", " << x.y << std::endl;
-
-	{auto _model = wl::load_model("../tri.obj");
-	if(!_model.has_value) return 1;
-	wl::model model = _model.value;}
-
-	{auto _image = wl::load_image("../test.png");
-	if(!_image.has_value) return 2;
-	wl::image image = _image.value;}
-	
-	{auto _image = wl::load_image("../test.exr");
-	if(!_image.has_value) return 2;
-	wl::image image = _image.value;}
 
 	auto window = wl::create_window(800, 600, "waylib");
 	auto state = wl::create_default_device_from_window(window);
@@ -47,15 +46,26 @@ int main() {
 	// };
 	// wgpuQueueOnSubmittedWorkDone(queue, onQueueWorkDone, nullptr /* pUserData */);
 
-	wl::time time = {}; 
+	// Load the shader module
+	wl::model model = wl::throw_if_null(wl::load_model(state, "../tri.obj"));
+	model.material_count = 1;
+	wl::shader shader = wl::create_shader(
+		state, shaderSource, 
+		{.vertex_entry_point = "vertex", .fragment_entry_point = "fragment", .name = "Default Shader"}
+	);
+	wl::material mat = wl::create_material(state, shader);
+	model.materials = &mat;
+	wl::index_t map = 0;
+	model.mesh_materials = &map;
 
+	wl::time time = {};
 	while(!wl::window_should_close(window)) {
-		auto frame = wl::promote_null_to_exception(
+		wl::time_calculations(time);
+		auto frame = wl::throw_if_null(
 			wl::begin_drawing(state, wl::color8bit{229, 25, 51, 255})
 		);
 		{
-			wl::time_calculations(time);
-			
+			wl::model_draw(frame, model);
 		}
 		wl::end_drawing(state, frame);
 	}
