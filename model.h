@@ -1,5 +1,6 @@
 #pragma once
 #include "texture.h"
+#include "waylib.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -117,8 +118,15 @@ WAYLIB_OPTIONAL(model) load_model_from_memory(
 #endif
 );
 
+void model_draw_instanced(
+	webgpu_frame_state* frame,
+	model* model,
+	model_instance_data* instances,
+	size_t instance_count
+);
+
 void model_draw(
-	webgpu_frame_state frame,
+	webgpu_frame_state* frame,
 	model* model
 );
 

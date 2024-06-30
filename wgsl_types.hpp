@@ -71,7 +71,9 @@ using vec4 = typename detail::vec_t<4, T>::type;
 template<typename T>
 using mat4x4 = typename detail::mat_t<4, 4, T>::type;
 
-#define WAYLIB_MATERIALIZE_TYPE(dst, src, constructor) struct dst : public src { using src::constructor; using src::operator=; }
+#define WAYLIB_MATERIALIZE_TYPE(dst, src, constructor) struct dst : public src { using src::constructor; using src::operator=;\
+	dst(const dst& other) : src(other) {}\
+	dst(const src& other) : src(other) {} }
 WAYLIB_MATERIALIZE_TYPE(vec2i, vec2<int32_t>, vec2);
 WAYLIB_MATERIALIZE_TYPE(vec2f, vec2<float>, vec2);
 WAYLIB_MATERIALIZE_TYPE(vec3f, vec3<float>, vec3);

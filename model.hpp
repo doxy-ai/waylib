@@ -40,8 +40,14 @@ WAYLIB_OPTIONAL(model) load_model_from_memory(
 #endif
 );
 
+void model_draw_instanced(
+	webgpu_frame_state& frame,
+	model& model,
+	std::span<model_instance_data> instances
+);
+
 void model_draw(
-	webgpu_frame_state frame,
+	webgpu_frame_state& frame,
 	model& model
 );
 

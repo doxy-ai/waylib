@@ -240,7 +240,7 @@ void mesh_upload(webgpu_state state, mesh& mesh) {
 	std::vector<std::byte> zeroBuffer(biggest, std::byte{});
 
 	wgpu::BufferDescriptor bufferDesc;
-	bufferDesc.label = "Vertex Position Buffer";
+	bufferDesc.label = "Waylib Vertex Buffer";
 	bufferDesc.size = mesh.vertexCount * sizeof(vec2f) * 2
 		+ mesh.vertexCount * sizeof(vec3f) * 2
 		+ mesh.vertexCount * sizeof(vec4f) * 1
@@ -303,6 +303,8 @@ void mesh_upload(webgpu_state state, mesh* mesh) {
 // #Material
 //////////////////////////////////////////////////////////////////////
 
+pipeline_globals& create_pipeline_globals(webgpu_state state); // Declared in waylib.cpp
+
 void material_upload(webgpu_state state, material& material) {
 	// Create the render pipeline
 	wgpu::RenderPipelineDescriptor pipelineDesc;
@@ -345,8 +347,9 @@ void material_upload(webgpu_state state, material& material) {
 	// Default value as well (irrelevant for count = 1 anyways)
 	pipelineDesc.multisample.alphaToCoverageEnabled = false;
 
-	// Deduce layout from shaders
-	pipelineDesc.layout = nullptr;
+	// Associate with the global layout
+	pipelineDesc.layout = create_pipeline_globals(state).layout;
+
 	if(material.pipeline) material.pipeline.release();
 	material.pipeline = state.device.createRenderPipeline(pipelineDesc);
 }
@@ -418,7 +421,45 @@ WAYLIB_OPTIONAL(model) load_model_from_memory(webgpu_state state, std::span<std:
 	return load_model_from_memory(state, (unsigned char*)data.data(), data.size(), config);
 }
 
-void model_draw(webgpu_frame_state frame, model& model) {
+void model_draw_instanced(webgpu_frame_state& frame, model& model, std::span<model_instance_data> instances) {
+	static WGPUBufferDescriptor bufferDesc = {
+		.label = "Waylib Instance Buffer",
+		.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Storage,
+		.size = sizeof(model_instance_data),
+		.mappedAtCreation = false,
+	};
+	static wgpu::Buffer instanceBuffer;
+	static wgpu::BindGroup bindGroup;
+
+	if(instances.size() > 0) {
+#ifndef WAYLIB_NO_CAMERAS
+		for(auto& data: instances)
+			data.get_transform() = frame.get_current_view_projection_matrix() * data.get_transform();
+#endif // WAYLIB_NO_CAMERAS
+
+		if(!instanceBuffer || instanceBuffer.getSize() < sizeof(model_instance_data) * instances.size()) {
+			if(instanceBuffer) instanceBuffer.release();
+			bufferDesc.size = sizeof(model_instance_data) * instances.size();
+			instanceBuffer = frame.state.device.createBuffer(bufferDesc);
+		}
+		frame.state.device.getQueue().writeBuffer(instanceBuffer, 0, instances.data(), sizeof(model_instance_data) * instances.size());
+
+		std::array<WGPUBindGroupEntry, 1> bindings = {WGPUBindGroupEntry{
+			.binding = 0,
+			.buffer = instanceBuffer,
+			.offset = 0,
+			.size = sizeof(model_instance_data) * instances.size(),
+		}};
+		wgpu::BindGroupDescriptor bindGroupDesc = wgpu::Default;
+		bindGroupDesc.layout = create_pipeline_globals(frame.state).bindGroupLayouts[0]; // Group 0 is instance data
+		bindGroupDesc.entryCount = bindings.size();
+		bindGroupDesc.entries = bindings.data();
+		
+		if(bindGroup) bindGroup.release();
+		bindGroup = frame.state.device.createBindGroup(bindGroupDesc);
+		frame.render_pass.setBindGroup(0, bindGroup, 0, nullptr);
+	}
+
 	for(size_t i = 0; i < model.mesh_count; ++i) {
 		// Select which render pipeline to use
 		frame.render_pass.setPipeline(model.materials[model.mesh_materials[i]].pipeline);
@@ -453,13 +494,21 @@ void model_draw(webgpu_frame_state frame, model& model) {
 		if(mesh.indexBuffer) {
 			// TODO: Need to be able to calculate the index format from the type of index_t
 			frame.render_pass.setIndexBuffer(mesh.indexBuffer, wgpu::IndexFormat::Uint16, 0, mesh.indexBuffer.getSize());
-			frame.render_pass.drawIndexed(mesh.triangleCount * 3, 1, 0, 0, 0);
+			frame.render_pass.drawIndexed(mesh.triangleCount * 3, std::max<size_t>(instances.size(), 1), 0, 0, 0);
 		} else
-			frame.render_pass.draw(model.meshes[i].vertexCount, 1, 0, 0);
+			frame.render_pass.draw(model.meshes[i].vertexCount, std::max<size_t>(instances.size(), 1), 0, 0);
 	}
 }
-void model_draw(webgpu_frame_state frame, model* model) {
-	model_draw(frame, *model);
+void model_draw_instanced(webgpu_frame_state* frame, model* model, model_instance_data* instances, size_t instance_count) {
+	model_draw_instanced(*frame, *model, {instances, instance_count});
+}
+
+void model_draw(webgpu_frame_state& frame, model& model) {
+	model_instance_data instance = {model.transform, {1, 1, 1, 1}};
+	model_draw_instanced(frame, model, {&instance, 1});
+}
+void model_draw(webgpu_frame_state* frame, model* model) {
+	model_draw(*frame, *model);
 }
 
 #ifdef WAYLIB_NAMESPACE_NAME

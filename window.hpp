@@ -31,6 +31,20 @@ wgpu::Surface window_get_surface(
 	wgpu::Device webgpu
 );
 
+#ifndef WAYLIB_NO_CAMERAS
+void window_begin_camera_mode3D(
+	webgpu_frame_state& frame,
+	window* window,
+	camera3D& camera
+);
+
+void window_begin_camera_mode2D(
+	webgpu_frame_state& frame,
+	window* window,
+	camera2D& camera
+);
+#endif // WAYLIB_NO_CAMERAS
+
 #ifdef WAYLIB_NAMESPACE_NAME
 }
 #endif

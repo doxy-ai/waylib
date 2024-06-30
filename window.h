@@ -104,6 +104,8 @@ bool window_should_close(
 #endif
 );
 
+vec2i window_get_dimensions(window* window);
+
 WAYLIB_C_OR_CPP_TYPE(WGPUSurface, wgpu::Surface) window_get_surface(window* window, WGPUInstance instance);
 
 webgpu_state window_get_webgpu_state(window* window, WGPUDevice device);
@@ -132,6 +134,20 @@ webgpu_state create_default_device_from_window(
 		= false
 #endif
 );
+
+#ifndef WAYLIB_NO_CAMERAS
+void window_begin_camera_mode3D(
+	webgpu_frame_state* frame,
+	window* window,
+	camera3D* camera
+);
+
+void window_begin_camera_mode2D(
+	webgpu_frame_state* frame,
+	window* window,
+	camera2D* camera
+);
+#endif // WAYLIB_NO_CAMERAS
 
 #ifdef __cplusplus
 } // End extern "C"

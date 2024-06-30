@@ -93,6 +93,12 @@ bool window_should_close(window* window, bool should_poll_events /*= true*/) {
 	return glfwWindowShouldClose(window);
 }
 
+vec2i window_get_dimensions(window* window) {
+	vec2i out;
+	glfwGetWindowSize(window, &out.x, &out.y);
+	return out;
+}
+
 wgpu::Surface window_get_surface(window* window, WGPUInstance instance) {
 	return glfwGetWGPUSurface(instance, window);
 }
@@ -109,9 +115,7 @@ bool window_configure_surface(
 	window* window, webgpu_state state,
 	surface_configuration config /*= {}*/
 ) {
-	int width, height;
-	glfwGetWindowSize(window, &width, &height);
-	return configure_surface(state, vec2i{width, height}, config);
+	return configure_surface(state, window_get_dimensions(window), config);
 }
 
 void window_automatically_reconfigure_surface_on_resize(
@@ -145,6 +149,22 @@ webgpu_state create_default_device_from_window(window* window, bool prefer_low_p
 		.surface = surface
 	};
 }
+
+#ifndef WAYLIB_NO_CAMERAS
+void window_begin_camera_mode3D(webgpu_frame_state* frame, window* window, camera3D* camera) {
+	begin_camera_mode3D(*frame, *camera, window_get_dimensions(window));
+}
+void window_begin_camera_mode3D(webgpu_frame_state& frame, window* window, camera3D& camera) {
+	begin_camera_mode3D(frame, camera, window_get_dimensions(window));
+}
+
+void window_begin_camera_mode2D(webgpu_frame_state* frame, window* window, camera2D* camera) {
+	begin_camera_mode2D(*frame, *camera, window_get_dimensions(window));
+}
+void window_begin_camera_mode2D(webgpu_frame_state& frame, window* window, camera2D& camera) {
+	begin_camera_mode2D(frame, camera, window_get_dimensions(window));
+}
+#endif // WAYLIB_NO_CAMERAS
 
 #ifdef WAYLIB_NAMESPACE_NAME
 }

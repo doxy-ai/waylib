@@ -1,41 +1,12 @@
 #pragma once
-#include "config.h"
+#include "math.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 struct shader_preprocessor;
-
-// Define mathematical types used... in C++ they are provided by glm so we just prototype them here!
-typedef struct mat4x4f_ {
-	float a0, a1, a2, a3;
-	float b0, b1, b2, b3;
-	float c0, c1, c2, c3;
-	float d0, d1, d2, d3;
-} mat4x4f_;
-
-#ifndef __cplusplus
-typedef struct vec2i {
-	int32_t x, y;
-} vec2i;
-typedef struct vec2f {
-	float x, y;
-} vec2f;
-typedef struct vec3f {
-	float x, y, z;
-} vec3f;
-typedef struct vec4f {
-	float x, y, z, w;
-} vec4f;
-typedef struct mat4x4f_ mat4x4f; // The version we use in the c++ side is quite a bit more advanced
-#else
-struct vec2i;
-struct vec2f;
-struct vec3f;
-struct vec4f;
-struct mat4x4f;
-#endif
+struct camera_globals;
 
 typedef struct {
 	float r, g, b, a;
@@ -100,6 +71,7 @@ typedef struct mesh {
 
 	WAYLIB_C_OR_CPP_TYPE(WGPUBuffer, wgpu::Buffer) buffer; // Pointer to the data on the gpu
 	WAYLIB_C_OR_CPP_TYPE(WGPUBuffer, wgpu::Buffer) indexBuffer; // Pointer to the index data on the gpu
+	WAYLIB_C_OR_CPP_TYPE(WGPUBuffer, wgpu::Buffer) instanceBuffer; // Pointer to the per-instance data on the gpu
 } mesh;
 
 // Bone, skeletal animation bone
@@ -110,7 +82,7 @@ typedef struct bone_info {
 	mat4x4f_ bind_pose;     // Bones base transformation (pose) // TODO: Why was this in model?
 
 #ifdef WAYLIB_ENABLE_CLASSES
-	mat4x4f& get_bind_pose() { return *(mat4x4f*)&bind_pose; }
+	inline mat4x4f& get_bind_pose() { return *(mat4x4f*)&bind_pose; }
 #endif
 } bone_info;
 
@@ -130,9 +102,22 @@ typedef struct model {
 	bone_info* bones;        // Bones information (skeleton)
 
 #ifdef WAYLIB_ENABLE_CLASSES
-	mat4x4f& get_transform() { return *(mat4x4f*)&transform; }
+	inline mat4x4f& get_transform() { return *(mat4x4f*)&transform; }
 #endif
 } model;
+
+typedef struct model_instance_data {
+	mat4x4f_ transform
+	; color tint
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {1, 1, 1, 1}
+#endif
+	;
+
+#ifdef WAYLIB_ENABLE_CLASSES
+	inline mat4x4f& get_transform() { return *(mat4x4f*)&transform; }
+#endif
+} model_instance_data;
 
 // Format of the data stored in the image
 // WAYLIB_ENUM image_format {
@@ -154,6 +139,59 @@ typedef struct image {
 	// image_format format;    // Data format (PixelFormat type)
 } image;
 
+#ifndef WAYLIB_NO_CAMERAS
+	#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		#define WAYLIB_CAMERA_3D_MEMBERS\
+			vec3f position; /* Camera position */\
+			vec3f target; /* Camera target it looks-at*/\
+			vec3f up = {0, 1, 0}; /* Camera up vector (rotation over its axis)*/\
+			float field_of_view = 90; /* Camera field-of-view aperture in Y (degrees) in perspective, used as near plane width in orthographic */\
+			float near_clip_distance = .01, far_clip_distance = 1000; /* Distances before objects are culled */\
+			bool orthographic = false; /* True if the camera should use orthographic projection */
+
+		#define WAYLIB_CAMERA_2D_MEMBERS\
+			vec3f offset; /* Camera offset (displacement from target)*/\
+			vec3f target; /* Camera target (rotation and zoom origin)*/\
+			degree rotation = 0; /* Camera rotation in degrees*/\
+			float near_clip_distance = .01, far_clip_distance = 1000; /* Distances before objects are culled */\
+			float zoom = 1; /* Camera zoom (scaling), should be 1.0f by default*/
+	#else
+		#define WAYLIB_CAMERA_3D_MEMBERS\
+			vec3f position; /* Camera position */\
+			vec3f target; /* Camera target it looks-at*/\
+			vec3f up; /* Camera up vector (rotation over its axis)*/\
+			float field_of_view; /* Camera field-of-view aperture in Y (degrees) in perspective, used as near plane width in orthographic */\
+			float near_clip_distance, far_clip_distance; /* Distances before objects are culled */\
+			bool orthographic; /* True if the camera should use orthographic projection */
+
+		#define WAYLIB_CAMERA_2D_MEMBERS\
+			vec3f offset; /* Camera offset (displacement from target)*/\
+			vec3f target; /* Camera target (rotation and zoom origin)*/\
+			degree rotation; /* Camera rotation in degrees*/\
+			float near_clip_distance, far_clip_distance; /* Distances before objects are culled */\
+			float zoom; /* Camera zoom (scaling), should be 1.0f by default*/
+	#endif // WAYLIB_ENABLE_DEFAULT_PARAMETERS
+
+#ifndef __cplusplus
+	// Camera, defines position/orientation in 3d space
+	// From: raylib.h
+	typedef struct camera3D {
+		WAYLIB_CAMERA_3D_MEMBERS
+	} camera3D;
+
+	// Camera2D, defines position/orientation in 2d space
+	// From: raylib.h
+	typedef struct camera2D {
+		WAYLIB_CAMERA_2D_MEMBERS
+	} camera2D;
+#else
+	struct camera3D;
+	struct camera2D;
+#endif
+
+typedef camera3D camera;	// By default a camera is a 3D camera
+#endif // WAYLIB_NO_CAMERAS
+
 // Struct holding all of the state needed by webgpu functions
 typedef struct webgpu_state {
 	WAYLIB_C_OR_CPP_TYPE(WGPUDevice, wgpu::Device) device;
@@ -161,9 +199,15 @@ typedef struct webgpu_state {
 } webgpu_state;
 
 typedef struct webgpu_frame_state {
+	webgpu_state state;
 	WAYLIB_C_OR_CPP_TYPE(WGPUTextureView, wgpu::TextureView) target;
 	WAYLIB_C_OR_CPP_TYPE(WGPUCommandEncoder, wgpu::CommandEncoder) encoder;
 	WAYLIB_C_OR_CPP_TYPE(WGPURenderPassEncoder, wgpu::RenderPassEncoder) render_pass;
+	mat4x4f_ current_VP;
+
+#ifdef WAYLIB_ENABLE_CLASSES
+	inline mat4x4f& get_current_view_projection_matrix() { return *(mat4x4f*)&current_VP; }
+#endif
 } webgpu_frame_state;
 
 typedef struct time {
@@ -243,6 +287,11 @@ void set_error_message_raw(const char* message);
 void clear_error_message();
 
 void time_calculations(time* time);
+void time_upload(
+	webgpu_frame_state* frame, 
+	time* time
+);
+
 bool open_url(const char* url);
 
 WAYLIB_C_OR_CPP_TYPE(WGPUDevice, wgpu::Device) create_default_device_from_instance(
@@ -370,9 +419,36 @@ WAYLIB_OPTIONAL(webgpu_frame_state) begin_drawing(
 );
 
 void end_drawing(
-	webgpu_state state,
-	webgpu_frame_state frame
+	webgpu_frame_state* frame
 );
+
+#ifndef WAYLIB_NO_CAMERAS
+WAYLIB_C_OR_CPP_TYPE(mat4x4f_, mat4x4f) camera3D_get_matrix(
+	camera3D* camera, 
+	vec2i window_dimensions
+);
+
+WAYLIB_C_OR_CPP_TYPE(mat4x4f_, mat4x4f) camera2D_get_matrix(
+	camera2D* camera, 
+	vec2i window_dimensions
+);
+
+void begin_camera_mode3D(
+	webgpu_frame_state* frame,
+	camera3D* camera, 
+	vec2i window_dimensions
+);
+
+void begin_camera_mode2D(
+	webgpu_frame_state* frame,
+	camera2D* camera, 
+	vec2i window_dimensions
+);
+
+void end_camera_mode(
+	webgpu_frame_state* frame
+);
+#endif // WAYLIB_NO_CAMERAS
 
 #ifdef __cplusplus
 } // End extern "C"

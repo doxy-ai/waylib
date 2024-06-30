@@ -5,18 +5,40 @@
 #include <iostream>
 
 const char* shaderSource = R"(
+struct time_data {
+	since_start: f32,
+	delta: f32,
+	average_delta: f32,
+};
+
+struct model_instance_data {
+    transform: mat4x4f,
+    tint: vec4f,
+};
+
+@group(0) @binding(0) var<storage, read> instances: array<model_instance_data>;
+@group(1) @binding(0) var<uniform> time: time_data;
+
+struct input_vertex {
+	@location(0) position: vec3f,
+	@location(1) texcoords: vec2f,
+	@location(2) normal: vec3f,
+	@location(3) color: vec4f,
+	@location(4) tangents: vec4f,
+	@location(5) texcoords2: vec2f,
+};
+
 @vertex
-fn vertex(@location(0) in_vertex_position: vec3f) -> @builtin(position) vec4f {
-#ifndef flip
-    return vec4f(in_vertex_position.xzy, 1.0);
-#else
-	return vec4f(in_vertex_position, 1.0);
-#endif
+fn vertex(vertex: input_vertex, @builtin(instance_index) inst_id: u32) -> @builtin(position) vec4f {
+	let transform = instances[inst_id].transform;
+	return transform * vec4f(vertex.position, 1);
+	// return vec4f(vertex.position.xzy, 1);
 }
 
 @fragment
 fn fragment() -> @location(0) vec4f {
-	return vec4f(0.0, 0.4, 1.0, 1.0);
+	let time = time.delta * 1400;
+	return vec4f(vec3f(0.0, 0.4, 1.0) * time, 1);
 })";
 
 int main() {
@@ -54,7 +76,7 @@ int main() {
 	// wl::preprocessor_add_define(p, "flip", "1");
 	auto texture = wl::load_image("../test.png");
 
-	wl::open_url("https://google.com");
+	// wl::open_url("https://google.com");
 
 	// Load the shader module
 	wl::model model = wl::throw_if_null(wl::load_model(state, "../tri.obj"));
@@ -82,6 +104,8 @@ int main() {
 	std::cout << res << std::endl;
 	std::cout << wl::preprocessor_get_cached_file(p, "/virtual/bob.wgsl") << std::endl;
 
+	wl::camera3D camera = {{0, 3, -5}, {0, 0, 0}};
+
 	wl::time time = {};
 	while(!wl::window_should_close(window)) {
 		wl::time_calculations(time);
@@ -89,9 +113,15 @@ int main() {
 			wl::begin_drawing(state, wl::color{0.9, .1,  0.2, 1})
 		);
 		{
-			wl::model_draw(frame, model);
+			wl::time_upload(frame, time);
+			wl::window_begin_camera_mode3D(frame, window, camera);
+			{
+				auto dbg = frame.current_VP;
+				wl::model_draw(frame, model);
+			}
+			wl::end_camera_mode(frame);
 		}
-		wl::end_drawing(state, frame);
+		wl::end_drawing(frame);
 	}
 
 	wl::release_shader_preprocessor(p);
