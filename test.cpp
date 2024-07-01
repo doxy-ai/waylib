@@ -54,6 +54,8 @@ int main() {
 	// wl::preprocessor_add_define(p, "flip", "1");
 	auto texture = wl::load_image("../test.png");
 
+	wl::open_url("https://google.com");
+
 	// Load the shader module
 	wl::model model = wl::throw_if_null(wl::load_model(state, "../tri.obj"));
 	model.material_count = 1;

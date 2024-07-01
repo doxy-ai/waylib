@@ -7,6 +7,9 @@
 #define TCPP_IMPLEMENTATION
 #include "thirdparty/tcppLibrary.hpp"
 
+#define OPEN_URL_NAMESPACE wl_detail
+#include "thirdparty/open.hpp"
+
 #ifdef WAYLIB_NAMESPACE_NAME
 namespace WAYLIB_NAMESPACE_NAME {
 #endif
@@ -66,6 +69,10 @@ void time_calculations(time& time) {
 	last = now;
 }
 void time_calculations(time* time) { time_calculations(*time); }
+
+bool open_url(const char* url) {
+	return wl_detail::open_url(url);
+}
 
 void process_wgpu_events([[maybe_unused]] Device device, [[maybe_unused]] bool yieldToWebBrowser = true) {
 #if defined(WEBGPU_BACKEND_DAWN)

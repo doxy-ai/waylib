@@ -243,6 +243,7 @@ void set_error_message_raw(const char* message);
 void clear_error_message();
 
 void time_calculations(time* time);
+bool open_url(const char* url);
 
 WAYLIB_C_OR_CPP_TYPE(WGPUDevice, wgpu::Device) create_default_device_from_instance(
 	WGPUInstance instance,
