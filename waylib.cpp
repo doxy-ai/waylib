@@ -447,11 +447,45 @@ WAYLIB_OPTIONAL(shader) create_shader(webgpu_state state, const char* wgsl_sourc
 // #Begin/End Drawing
 //////////////////////////////////////////////////////////////////////
 
-WAYLIB_OPTIONAL(webgpu_frame_state) begin_drawing_render_texture(webgpu_state state, WGPUTextureView render_texture, WAYLIB_OPTIONAL(color) clear_color /*= {}*/) {
+WAYLIB_OPTIONAL(webgpu_frame_state) begin_drawing_render_texture(webgpu_state state, WGPUTextureView render_texture, vec2i render_texture_dimensions, WAYLIB_OPTIONAL(color) clear_color /*= {}*/) {
+	static WGPUTextureViewDescriptor depthTextureViewDesc = {
+		.format = depth_texture_format,
+		.dimension = wgpu::TextureViewDimension::_2D,
+		.baseMipLevel = 0,
+		.mipLevelCount = 1,
+		.baseArrayLayer = 0,
+		.arrayLayerCount = 1,
+		.aspect = wgpu::TextureAspect::DepthOnly,
+	};
+	static WGPUTextureDescriptor depthTextureDesc = {
+		.usage = TextureUsage::RenderAttachment,
+		.dimension = wgpu::TextureDimension::_2D,
+		.format = depth_texture_format,
+		.mipLevelCount = 1,
+		.sampleCount = 1,
+		.viewFormatCount = 1,
+		.viewFormats = (WGPUTextureFormat*)&depth_texture_format,
+	};
+
+	static wgpu::Texture depthTexture;
+	static wgpu::TextureView depthTextureView;
+
 	// Create a command encoder for the draw call
 	wgpu::CommandEncoderDescriptor encoderDesc = {};
 	encoderDesc.label = "Waylib Command Encoder";
 	wgpu::CommandEncoder encoder = state.device.createCommandEncoder(encoderDesc);
+
+	// Update the depth texture (if nessicary)
+	if(!depthTexture || depthTextureDesc.size.width != render_texture_dimensions.x || depthTextureDesc.size.height != render_texture_dimensions.y) {
+		depthTextureDesc.size = {(uint32_t)render_texture_dimensions.x, (uint32_t)render_texture_dimensions.y, 1};
+		if(depthTextureView) depthTextureView.release();
+		if(depthTexture) {
+			depthTexture.destroy();
+			depthTexture.release();
+		}
+		depthTexture = state.device.createTexture(depthTextureDesc);
+		depthTextureView = depthTexture.createView(depthTextureViewDesc);
+	}
 
 	// Create the render pass that clears the screen with our color
 	wgpu::RenderPassDescriptor renderPassDesc = {};
@@ -465,15 +499,34 @@ WAYLIB_OPTIONAL(webgpu_frame_state) begin_drawing_render_texture(webgpu_state st
 	renderPassColorAttachment.clearValue = to_webgpu(clear_color.has_value ? clear_color.value : color{0, 0, 0, 0});
 	renderPassColorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
 
+	// We now add a depth/stencil attachment:
+	wgpu::RenderPassDepthStencilAttachment depthStencilAttachment;
+	depthStencilAttachment.view = depthTextureView;
+	// The initial value of the depth buffer, meaning "far"
+	depthStencilAttachment.depthClearValue = 1.0f;
+	// Operation settings comparable to the color attachment
+	depthStencilAttachment.depthLoadOp = clear_color.has_value ? wgpu::LoadOp::Clear : wgpu::LoadOp::Load;
+	depthStencilAttachment.depthStoreOp = wgpu::StoreOp::Store;
+	// we could turn off writing to the depth buffer globally here
+	depthStencilAttachment.depthReadOnly = false;
+
+	// Stencil setup, mandatory but unused
+	depthStencilAttachment.stencilClearValue = 0;
+	// depthStencilAttachment.stencilLoadOp = clear_color.has_value ? wgpu::LoadOp::Clear : wgpu::LoadOp::Load;
+	// depthStencilAttachment.stencilStoreOp = wgpu::StoreOp::Store;
+	depthStencilAttachment.stencilLoadOp = wgpu::LoadOp::Undefined;
+	depthStencilAttachment.stencilStoreOp = wgpu::StoreOp::Undefined;
+	depthStencilAttachment.stencilReadOnly = true;
+
 	renderPassDesc.colorAttachmentCount = 1;
 	renderPassDesc.colorAttachments = &renderPassColorAttachment;
-	renderPassDesc.depthStencilAttachment = nullptr;
+	renderPassDesc.depthStencilAttachment = &depthStencilAttachment;
 	renderPassDesc.timestampWrites = nullptr;
 
 	// Create the render pass and end it immediately (we only clear the screen but do not draw anything)
 	wgpu::RenderPassEncoder renderPass = encoder.beginRenderPass(renderPassDesc);
 
-	webgpu_frame_state out = {state, render_texture, encoder, renderPass};
+	webgpu_frame_state out = {state, render_texture, depthTexture, depthTextureView, encoder, renderPass};
 	out.get_current_view_projection_matrix() = glm::identity<glm::mat4x4>();
 	return out;
 }
@@ -497,7 +550,7 @@ WAYLIB_OPTIONAL(webgpu_frame_state) begin_drawing(webgpu_state state, WAYLIB_OPT
 	viewDescriptor.arrayLayerCount = 1;
 	viewDescriptor.aspect = wgpu::TextureAspect::All;
 
-	return begin_drawing_render_texture(state, texture.createView(viewDescriptor), clear_color);
+	return begin_drawing_render_texture(state, texture.createView(viewDescriptor), {texture.getWidth(), texture.getHeight()}, clear_color);
 }
 
 void end_drawing(webgpu_frame_state& frame) {

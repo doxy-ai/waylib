@@ -6,6 +6,14 @@
 extern "C" {
 #endif
 
+typedef struct material_configuration {
+	WAYLIB_OPTIONAL(WGPUCompareFunction) depth_function 
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= wgpu::CompareFunction::Less // Disables writing depth if not provided
+#endif
+	; // TODO: Add stencil support
+} material_configuration;
+
 typedef struct model_process_optimization_configuration {
 	; bool vertex_cache_locality
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
@@ -84,13 +92,21 @@ void mesh_upload(
 
 void material_upload(
 	webgpu_state state,
-	material* material
+	material* material,
+	material_configuration config
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
 );
 
 material create_material(
 	webgpu_state state,
 	shader* shaders,
-	size_t shader_count
+	size_t shader_count,
+	material_configuration config
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
 );
 
 model_process_configuration default_model_process_configuration();

@@ -200,7 +200,9 @@ typedef struct webgpu_state {
 
 typedef struct webgpu_frame_state {
 	webgpu_state state;
-	WAYLIB_C_OR_CPP_TYPE(WGPUTextureView, wgpu::TextureView) target;
+	WAYLIB_C_OR_CPP_TYPE(WGPUTextureView, wgpu::TextureView) color_target;
+	WAYLIB_C_OR_CPP_TYPE(WGPUTexture, wgpu::Texture) depth_texture;
+	WAYLIB_C_OR_CPP_TYPE(WGPUTextureView, wgpu::TextureView) depth_target;
 	WAYLIB_C_OR_CPP_TYPE(WGPUCommandEncoder, wgpu::CommandEncoder) encoder;
 	WAYLIB_C_OR_CPP_TYPE(WGPURenderPassEncoder, wgpu::RenderPassEncoder) render_pass;
 	mat4x4f_ current_VP;
@@ -404,6 +406,7 @@ WAYLIB_OPTIONAL(shader) create_shader(
 WAYLIB_OPTIONAL(webgpu_frame_state) begin_drawing_render_texture(
 	webgpu_state state,
 	WGPUTextureView render_texture,
+	vec2i render_texture_dimensions,
 	WAYLIB_OPTIONAL(color) clear_color
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}

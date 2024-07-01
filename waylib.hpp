@@ -31,6 +31,8 @@ namespace wgpu {
 
 #include "waylib.h"
 
+constexpr static WGPUTextureFormat depth_texture_format = wgpu::TextureFormat::Depth24Plus;
+
 struct shader_preprocessor {
 	std::unordered_map<std::filesystem::path, std::string> file_cache;
 

@@ -14,16 +14,28 @@ void mesh_upload(
 
 void material_upload(
 	webgpu_state state,
-	material& material
+	material& material,
+	material_configuration config
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
 );
 
 material create_material(
 	webgpu_state state,
-	std::span<shader> shaders
+	std::span<shader> shaders,
+	material_configuration config
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
 );
 material create_material(
 	webgpu_state state,
-	shader& shader
+	shader& shader,
+	material_configuration config
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
 );
 
 void model_upload(

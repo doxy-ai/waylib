@@ -6,6 +6,7 @@
 #include <assimp/Importer.hpp>		// C++ importer interface
 #include <assimp/scene.h>			// Output data structure
 #include <assimp/postprocess.h>		// Post processing flags
+#include <limits>
 
 #ifdef WAYLIB_NAMESPACE_NAME
 namespace WAYLIB_NAMESPACE_NAME {
@@ -48,6 +49,7 @@ namespace detail {
 
 			for (unsigned int j = 0; j < aiMesh->mNumFaces; ++j) {
 				const aiFace& face = aiMesh->mFaces[j];
+				assert(face.mNumIndices == 3);
 				// Assuming triangles
 				m.indices[j * 3 + 0] = face.mIndices[0];
 				m.indices[j * 3 + 1] = face.mIndices[1];
@@ -105,6 +107,15 @@ namespace detail {
 		if(config.optimize.find_instances) flags |= aiProcess_FindInstances;
 		if(config.optimize.meshes) flags |= aiProcess_OptimizeMeshes;
 		return flags;
+	}
+
+	template<typename T>
+	wgpu::IndexFormat calculate_index_format() {
+		static_assert(sizeof(T) == 2 || sizeof(T) == 4, "Index types must either be u16 or u32 convertable.");
+
+		if constexpr(sizeof(T) == 2)
+			return wgpu::IndexFormat::Uint16;
+		else return wgpu::IndexFormat::Uint32;
 	}
 
 	wgpu::TextureFormat surface_prefered_format(webgpu_state state) {
@@ -305,7 +316,7 @@ void mesh_upload(webgpu_state state, mesh* mesh) {
 
 pipeline_globals& create_pipeline_globals(webgpu_state state); // Declared in waylib.cpp
 
-void material_upload(webgpu_state state, material& material) {
+void material_upload(webgpu_state state, material& material, material_configuration config /*= {}*/) {
 	// Create the render pipeline
 	wgpu::RenderPipelineDescriptor pipelineDesc;
 	wgpu::FragmentState fragment;
@@ -335,38 +346,45 @@ void material_upload(webgpu_state state, material& material) {
 	// used for optimization).
 	pipelineDesc.primitive.cullMode = wgpu::CullMode::None; // = wgpu::CullMode::Back;
 
-	// We do not use stencil/depth testing for now
-	pipelineDesc.depthStencil = nullptr;
+	// We setup a depth buffer state for the render pipeline
+	wgpu::DepthStencilState depthStencilState = Default;
+	// Keep a fragment only if its depth is lower than the previously blended one
+	depthStencilState.depthCompare = config.depth_function.has_value ? config.depth_function.value : wgpu::CompareFunction::Undefined;
+	// Each time a fragment is blended into the target, we update the value of the Z-buffer
+	depthStencilState.depthWriteEnabled = config.depth_function.has_value;
+	// Store the format in a variable as later parts of the code depend on it
+	depthStencilState.format = depth_texture_format;
+	// Deactivate the stencil alltogether
+	depthStencilState.stencilReadMask = 0;
+	depthStencilState.stencilWriteMask = 0;
+	pipelineDesc.depthStencil = &depthStencilState;
 
 	// Samples per pixel
 	pipelineDesc.multisample.count = 1;
-
 	// Default value for the mask, meaning "all bits on"
 	pipelineDesc.multisample.mask = ~0u;
-
 	// Default value as well (irrelevant for count = 1 anyways)
 	pipelineDesc.multisample.alphaToCoverageEnabled = false;
-
 	// Associate with the global layout
 	pipelineDesc.layout = create_pipeline_globals(state).layout;
 
 	if(material.pipeline) material.pipeline.release();
 	material.pipeline = state.device.createRenderPipeline(pipelineDesc);
 }
-void material_upload(webgpu_state state, material* material) {
-	material_upload(state, *material);
+void material_upload(webgpu_state state, material* material, material_configuration config /*= {}*/) {
+	material_upload(state, *material, config);
 }
 
-material create_material(webgpu_state state, shader* shaders, size_t shader_count) {
+material create_material(webgpu_state state, shader* shaders, size_t shader_count, material_configuration config /*= {}*/) {
 	material out {.shaderCount = (index_t)shader_count, .shaders = shaders};
-	material_upload(state, out);
+	material_upload(state, out, config);
 	return out;
 }
-material create_material(webgpu_state state, std::span<shader> shaders) {
-	return create_material(state, shaders.data(), shaders.size());
+material create_material(webgpu_state state, std::span<shader> shaders, material_configuration config /*= {}*/) {
+	return create_material(state, shaders.data(), shaders.size(), config);
 }
-material create_material(webgpu_state state, shader& shader) {
-	return create_material(state, &shader, 1);
+material create_material(webgpu_state state, shader& shader, material_configuration config /*= {}*/) {
+	return create_material(state, &shader, 1, config);
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -391,7 +409,8 @@ void model_upload(wl::webgpu_state state, wl::model* model) {
 WAYLIB_OPTIONAL(model) load_model(webgpu_state state, const char* file_path, model_process_configuration config) {
 	// Create an instance of the Importer class
 	Assimp::Importer importer;
-
+	importer.SetPropertyInteger(AI_CONFIG_PP_SLM_VERTEX_LIMIT, std::numeric_limits<index_t>::max());
+	
 	const aiScene* scene = importer.ReadFile(file_path, detail::calculateFlags(config));
 	if (scene == nullptr) {
 		set_error_message_raw(importer.GetErrorString());
@@ -492,8 +511,7 @@ void model_draw_instanced(webgpu_frame_state& frame, model& model, std::span<mod
 		}
 
 		if(mesh.indexBuffer) {
-			// TODO: Need to be able to calculate the index format from the type of index_t
-			frame.render_pass.setIndexBuffer(mesh.indexBuffer, wgpu::IndexFormat::Uint16, 0, mesh.indexBuffer.getSize());
+			frame.render_pass.setIndexBuffer(mesh.indexBuffer, detail::calculate_index_format<index_t>(), 0, mesh.indexBuffer.getSize());
 			frame.render_pass.drawIndexed(mesh.triangleCount * 3, std::max<size_t>(instances.size(), 1), 0, 0, 0);
 		} else
 			frame.render_pass.draw(model.meshes[i].vertexCount, std::max<size_t>(instances.size(), 1), 0, 0);
