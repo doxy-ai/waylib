@@ -1,7 +1,6 @@
 #ifndef WAYLIB_MODEL_IS_AVAILABLE
 #define WAYLIB_MODEL_IS_AVAILABLE
 #include "texture.h"
-#include "waylib.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -87,12 +86,12 @@ typedef struct model_process_configuration {
 } model_process_configuration;
 
 void mesh_upload(
-	webgpu_state state,
+	wgpu_state state,
 	mesh* mesh
 );
 
 void material_upload(
-	webgpu_state state,
+	wgpu_state state,
 	material* material,
 	material_configuration config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
@@ -101,7 +100,7 @@ void material_upload(
 );
 
 material create_material(
-	webgpu_state state,
+	wgpu_state state,
 	shader* shaders,
 	size_t shader_count,
 	material_configuration config
@@ -113,12 +112,12 @@ material create_material(
 model_process_configuration default_model_process_configuration();
 
 void model_upload(
-	webgpu_state state,
+	wgpu_state state,
 	model* model
 );
 
 WAYLIB_OPTIONAL(model) load_model(
-	webgpu_state state,
+	wgpu_state state,
 	const char * file_path,
 	model_process_configuration config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
@@ -127,7 +126,7 @@ WAYLIB_OPTIONAL(model) load_model(
 );
 
 WAYLIB_OPTIONAL(model) load_model_from_memory(
-	webgpu_state state,
+	wgpu_state state,
 	const unsigned char* data, size_t size,
 	model_process_configuration config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
@@ -136,14 +135,14 @@ WAYLIB_OPTIONAL(model) load_model_from_memory(
 );
 
 void model_draw_instanced(
-	webgpu_frame_state* frame,
+	wgpu_frame_state* frame,
 	model* model,
 	model_instance_data* instances,
 	size_t instance_count
 );
 
 void model_draw(
-	webgpu_frame_state* frame,
+	wgpu_frame_state* frame,
 	model* model
 );
 

@@ -11,6 +11,10 @@ namespace WAYLIB_NAMESPACE_NAME {
 #endif
 
 namespace detail {
+	std::string guarded_defines(shader_preprocessor* processor) {
+		return "#ifndef __WAYLIB_INTERNAL_DEFINES__\n#define __WAYLIB_INTERNAL_DEFINES__\n" + processor->defines + "\n#endif";
+	}
+
 	std::string remove_whitespace(const std::string& in) {
 		std::string out;
 		for(char c: in)
@@ -55,7 +59,7 @@ namespace detail {
 	std::optional<std::string> preprocess_shader_from_memory(shader_preprocessor* processor, const std::string& _data, const preprocess_shader_config& config) {
 		struct PreprocessFailed {};
 
-		auto data = std::make_unique<tcpp::StringInputStream>(processor->defines + _data + "\n");
+		auto data = std::make_unique<tcpp::StringInputStream>(guarded_defines(processor) + _data + "\n");
 		tcpp::Lexer lexer(std::move(data));
 		try {
 			tcpp::Preprocessor preprocessor(lexer, {[](const tcpp::TErrorInfo& info){
@@ -131,6 +135,35 @@ namespace detail {
 		auto data = read_entire_file(path, config);
 		if(!data) return {};
 		return preprocess_shader_from_memory_and_cache(processor, *data, path, config);
+	}
+
+	void preprocessor_initalize_platform_defines(shader_preprocessor* preprocessor, wgpu::Adapter adapter) {
+		constexpr static auto quote = [](const std::string& s) { return "\"" + s + "\""; };
+		wgpu::AdapterProperties p;
+		adapter.getProperties(&p);
+		preprocessor->defines += "#define WGPU_VENDOR_ID " + std::to_string(p.vendorID) + "\n";
+		preprocessor->defines += "#define WGPU_VENDOR_NAME " + quote(p.vendorName) + "\n";
+		preprocessor->defines += "#define WGPU_ARCHITECTURE " + quote(p.architecture) + "\n";
+		preprocessor->defines += "#define WGPU_DEVICE_ID " + std::to_string(p.deviceID) + "\n";
+		preprocessor->defines += "#define WGPU_NAME " + quote(p.name) + "\n";
+		preprocessor->defines += "#define WGPU_DRIVER_DESCRIPTION " + quote(p.driverDescription) + "\n";
+		preprocessor->defines += "#define WGPU_ADAPTER_TYPE " + std::to_string(p.adapterType) + "\n";
+		preprocessor->defines += "#define WGPU_BACKEND_TYPE " + std::to_string(p.backendType) + "\n";
+		preprocessor->defines += "#define WGPU_COMPATIBILITY_MODE " + std::to_string(p.compatibilityMode) + "\n";
+		
+		preprocessor->defines += "#define WGPU_ADAPTER_TYPE_DISCRETE_GPU " + std::to_string(wgpu::AdapterType::DiscreteGPU) + "\n";
+		preprocessor->defines += "#define WGPU_ADAPTER_TYPE_INTEGRATED_GPU " + std::to_string(wgpu::AdapterType::IntegratedGPU) + "\n";
+		preprocessor->defines += "#define WGPU_ADAPTER_TYPE_CPU " + std::to_string(wgpu::AdapterType::CPU) + "\n";
+
+		preprocessor->defines += "#define WGPU_BACKEND_TYPE_WEBGPU " + std::to_string(wgpu::BackendType::WebGPU) + "\n";
+		preprocessor->defines += "#define WGPU_BACKEND_TYPE_D3D11 " + std::to_string(wgpu::BackendType::D3D11) + "\n";
+		preprocessor->defines += "#define WGPU_BACKEND_TYPE_D3D12 " + std::to_string(wgpu::BackendType::D3D12) + "\n";
+		preprocessor->defines += "#define WGPU_BACKEND_TYPE_METAL " + std::to_string(wgpu::BackendType::Metal) + "\n";
+		preprocessor->defines += "#define WGPU_BACKEND_TYPE_VULKAN " + std::to_string(wgpu::BackendType::Vulkan) + "\n";
+		preprocessor->defines += "#define WGPU_BACKEND_TYPE_OPENGL " + std::to_string(wgpu::BackendType::OpenGL) + "\n";
+		preprocessor->defines += "#define WGPU_BACKEND_TYPE_OPENGLES " + std::to_string(wgpu::BackendType::OpenGLES) + "\n";
+
+		p.freeMembers();
 	}
 }
 

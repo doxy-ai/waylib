@@ -8,12 +8,12 @@ namespace WAYLIB_NAMESPACE_NAME {
 #include "model.h"
 
 void mesh_upload(
-	webgpu_state state,
+	wgpu_state state,
 	mesh& mesh
 );
 
 void material_upload(
-	webgpu_state state,
+	wgpu_state state,
 	material& material,
 	material_configuration config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
@@ -22,7 +22,7 @@ void material_upload(
 );
 
 material create_material(
-	webgpu_state state,
+	wgpu_state state,
 	std::span<shader> shaders,
 	material_configuration config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
@@ -30,7 +30,7 @@ material create_material(
 #endif
 );
 material create_material(
-	webgpu_state state,
+	wgpu_state state,
 	shader& shader,
 	material_configuration config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
@@ -39,12 +39,12 @@ material create_material(
 );
 
 void model_upload(
-	webgpu_state state,
+	wgpu_state state,
 	model& model
 );
 
 WAYLIB_OPTIONAL(model) load_model_from_memory(
-	webgpu_state state,
+	wgpu_state state,
 	std::span<std::byte> data,
 	model_process_configuration config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
@@ -53,13 +53,13 @@ WAYLIB_OPTIONAL(model) load_model_from_memory(
 );
 
 void model_draw_instanced(
-	webgpu_frame_state& frame,
+	wgpu_frame_state& frame,
 	model& model,
 	std::span<model_instance_data> instances
 );
 
 void model_draw(
-	webgpu_frame_state& frame,
+	wgpu_frame_state& frame,
 	model& model
 );
 

@@ -117,13 +117,13 @@ namespace detail {
 		else return wgpu::IndexFormat::Uint32;
 	}
 
-	wgpu::TextureFormat surface_prefered_format(webgpu_state state) {
+	wgpu::TextureFormat surface_prefered_format(wgpu_state state) {
 		wgpu::SurfaceCapabilities capabilities;
 		state.surface.getCapabilities(state.device.getAdapter(), &capabilities); // TODO: Always returns error?
 		return capabilities.formats[0];
 	}
 
-	std::pair<wgpu::RenderPipelineDescriptor, WAYLIB_OPTIONAL(wgpu::FragmentState)> shader_configure_render_pipeline_descriptor(webgpu_state state, shader shader, wgpu::RenderPipelineDescriptor pipelineDesc = {}) {
+	std::pair<wgpu::RenderPipelineDescriptor, WAYLIB_OPTIONAL(wgpu::FragmentState)> shader_configure_render_pipeline_descriptor(wgpu_state state, shader shader, wgpu::RenderPipelineDescriptor pipelineDesc = {}) {
 		static WGPUBlendState blendState = {
 			.color = {
 				.operation = wgpu::BlendOperation::Add,
@@ -245,7 +245,7 @@ namespace detail {
 // #Mesh
 //////////////////////////////////////////////////////////////////////
 
-void mesh_upload(webgpu_state state, mesh& mesh) WAYLIB_TRY {
+void mesh_upload(wgpu_state state, mesh& mesh) WAYLIB_TRY {
 	size_t biggest = std::max(mesh.vertexCount * sizeof(vec4f), mesh.triangleCount * sizeof(index_t) * 3);
 	std::vector<std::byte> zeroBuffer(biggest, std::byte{});
 
@@ -305,7 +305,7 @@ void mesh_upload(webgpu_state state, mesh& mesh) WAYLIB_TRY {
 		queue.writeBuffer(mesh.indexBuffer, 0, mesh.indices, mesh.triangleCount * sizeof(index_t) * 3);
 	} else if(mesh.indexBuffer) mesh.indexBuffer.release();
 } WAYLIB_CATCH()
-void mesh_upload(webgpu_state state, mesh* mesh) {
+void mesh_upload(wgpu_state state, mesh* mesh) {
 	mesh_upload(state, *mesh);
 }
 
@@ -313,9 +313,9 @@ void mesh_upload(webgpu_state state, mesh* mesh) {
 // #Material
 //////////////////////////////////////////////////////////////////////
 
-pipeline_globals& create_pipeline_globals(webgpu_state state); // Declared in waylib.cpp
+pipeline_globals& create_pipeline_globals(wgpu_state state); // Declared in waylib.cpp
 
-void material_upload(webgpu_state state, material& material, material_configuration config /*= {}*/) WAYLIB_TRY {
+void material_upload(wgpu_state state, material& material, material_configuration config /*= {}*/) WAYLIB_TRY {
 	// Create the render pipeline
 	wgpu::RenderPipelineDescriptor pipelineDesc;
 	wgpu::FragmentState fragment;
@@ -346,7 +346,7 @@ void material_upload(webgpu_state state, material& material, material_configurat
 	pipelineDesc.primitive.cullMode = wgpu::CullMode::None; // = wgpu::CullMode::Back;
 
 	// We setup a depth buffer state for the render pipeline
-	wgpu::DepthStencilState depthStencilState = Default;
+	wgpu::DepthStencilState depthStencilState = wgpu::Default;
 	// Keep a fragment only if its depth is lower than the previously blended one
 	depthStencilState.depthCompare = config.depth_function.has_value ? config.depth_function.value : wgpu::CompareFunction::Undefined;
 	// Each time a fragment is blended into the target, we update the value of the Z-buffer
@@ -370,19 +370,19 @@ void material_upload(webgpu_state state, material& material, material_configurat
 	if(material.pipeline) material.pipeline.release();
 	material.pipeline = state.device.createRenderPipeline(pipelineDesc);
 } WAYLIB_CATCH()
-void material_upload(webgpu_state state, material* material, material_configuration config /*= {}*/) {
+void material_upload(wgpu_state state, material* material, material_configuration config /*= {}*/) {
 	material_upload(state, *material, config);
 }
 
-material create_material(webgpu_state state, shader* shaders, size_t shader_count, material_configuration config /*= {}*/) {
+material create_material(wgpu_state state, shader* shaders, size_t shader_count, material_configuration config /*= {}*/) {
 	material out {.shaderCount = (index_t)shader_count, .shaders = shaders};
 	material_upload(state, out, config);
 	return out;
 }
-material create_material(webgpu_state state, std::span<shader> shaders, material_configuration config /*= {}*/) {
+material create_material(wgpu_state state, std::span<shader> shaders, material_configuration config /*= {}*/) {
 	return create_material(state, shaders.data(), shaders.size(), config);
 }
-material create_material(webgpu_state state, shader& shader, material_configuration config /*= {}*/) {
+material create_material(wgpu_state state, shader& shader, material_configuration config /*= {}*/) {
 	return create_material(state, &shader, 1, config);
 }
 
@@ -394,18 +394,18 @@ model_process_configuration default_model_process_configuration() {
 	return {}; // TODO: Expand
 }
 
-void model_upload(wl::webgpu_state state, wl::model& model) {
+void model_upload(wgpu_state state, model& model) {
 	for(size_t i = 0; i < model.mesh_count; ++i)
-		wl::mesh_upload(state, model.meshes[i]);
+		mesh_upload(state, model.meshes[i]);
 	for(size_t i = 0; i < model.material_count; ++i)
-		wl::material_upload(state, model.materials[i]);
+		material_upload(state, model.materials[i]);
 }
-void model_upload(wl::webgpu_state state, wl::model* model) {
+void model_upload(wgpu_state state, model* model) {
 	model_upload(state, *model);
 }
 
 
-WAYLIB_OPTIONAL(model) load_model(webgpu_state state, const char* file_path, model_process_configuration config) WAYLIB_TRY {
+WAYLIB_OPTIONAL(model) load_model(wgpu_state state, const char* file_path, model_process_configuration config) WAYLIB_TRY {
 	// Create an instance of the Importer class
 	Assimp::Importer importer;
 	importer.SetPropertyInteger(AI_CONFIG_PP_SLM_VERTEX_LIMIT, std::numeric_limits<index_t>::max());
@@ -421,7 +421,7 @@ WAYLIB_OPTIONAL(model) load_model(webgpu_state state, const char* file_path, mod
 	return out;
 } WAYLIB_CATCH({})
 
-WAYLIB_OPTIONAL(model) load_model_from_memory(webgpu_state state, const unsigned char * data, size_t size, model_process_configuration config) WAYLIB_TRY {
+WAYLIB_OPTIONAL(model) load_model_from_memory(wgpu_state state, const unsigned char * data, size_t size, model_process_configuration config) WAYLIB_TRY {
 	// Create an instance of the Importer class
 	Assimp::Importer importer;
 
@@ -435,11 +435,11 @@ WAYLIB_OPTIONAL(model) load_model_from_memory(webgpu_state state, const unsigned
 	model_upload(state, out);
 	return out;
 } WAYLIB_CATCH({})
-WAYLIB_OPTIONAL(model) load_model_from_memory(webgpu_state state, std::span<std::byte> data, model_process_configuration config) {
+WAYLIB_OPTIONAL(model) load_model_from_memory(wgpu_state state, std::span<std::byte> data, model_process_configuration config) {
 	return load_model_from_memory(state, (unsigned char*)data.data(), data.size(), config);
 }
 
-void model_draw_instanced(webgpu_frame_state& frame, model& model, std::span<model_instance_data> instances) WAYLIB_TRY {
+void model_draw_instanced(wgpu_frame_state& frame, model& model, std::span<model_instance_data> instances) WAYLIB_TRY {
 	static WGPUBufferDescriptor bufferDesc = {
 		.label = "Waylib Instance Buffer",
 		.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Storage,
@@ -480,7 +480,7 @@ void model_draw_instanced(webgpu_frame_state& frame, model& model, std::span<mod
 
 	for(size_t i = 0; i < model.mesh_count; ++i) {
 		// Select which render pipeline to use
-		frame.render_pass.setPipeline(model.materials[model.mesh_materials[i]].pipeline);
+		frame.render_pass.setPipeline(model.materials[model.get_material_index_for_mesh(i)].pipeline);
 
 		size_t currentOffset = 0;
 		auto& mesh = model.meshes[i];
@@ -516,15 +516,15 @@ void model_draw_instanced(webgpu_frame_state& frame, model& model, std::span<mod
 			frame.render_pass.draw(model.meshes[i].vertexCount, std::max<size_t>(instances.size(), 1), 0, 0);
 	}
 } WAYLIB_CATCH()
-void model_draw_instanced(webgpu_frame_state* frame, model* model, model_instance_data* instances, size_t instance_count) {
+void model_draw_instanced(wgpu_frame_state* frame, model* model, model_instance_data* instances, size_t instance_count) {
 	model_draw_instanced(*frame, *model, {instances, instance_count});
 }
 
-void model_draw(webgpu_frame_state& frame, model& model) {
+void model_draw(wgpu_frame_state& frame, model& model) {
 	model_instance_data instance = {model.transform, {1, 1, 1, 1}};
 	model_draw_instanced(frame, model, {&instance, 1});
 }
-void model_draw(webgpu_frame_state* frame, model* model) {
+void model_draw(wgpu_frame_state* frame, model* model) {
 	model_draw(*frame, *model);
 }
 

@@ -1,7 +1,7 @@
 #ifndef WAYLIB_TEXTURE_IS_AVAILABLE
 #define WAYLIB_TEXTURE_IS_AVAILABLE
 
-#include "waylib.h"
+#include "common.h"
 
 #ifdef __cplusplus
 extern "C" {

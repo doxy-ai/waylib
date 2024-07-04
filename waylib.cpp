@@ -1,8 +1,6 @@
-#define WEBGPU_CPP_IMPLEMENTATION
 #include "waylib.hpp"
 
 #include <chrono>
-#include <fstream>
 #include <limits>
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/ext/matrix_clip_space.hpp>
@@ -14,50 +12,8 @@
 namespace WAYLIB_NAMESPACE_NAME {
 #endif
 
-//////////////////////////////////////////////////////////////////////
-// #Pipeline Globals
-//////////////////////////////////////////////////////////////////////
-
-pipeline_globals& create_pipeline_globals(webgpu_state state) {
-	static pipeline_globals global;
-	if(global.created) return global;
-
-	// Create binding layout (don't forget to = Default)
-	std::array<wgpu::BindGroupLayoutEntry, 2> bindingLayouts = {Default, Default};
-	// G0 B0 == Instance Data
-	bindingLayouts[0].binding = 0;
-	bindingLayouts[0].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
-	bindingLayouts[0].buffer.type = wgpu::BufferBindingType::ReadOnlyStorage;
-	bindingLayouts[0].buffer.minBindingSize = sizeof(model_instance_data);
-	bindingLayouts[0].buffer.hasDynamicOffset = false;
-	// G1 B0 == Time Data
-	bindingLayouts[1].binding = 0;
-	bindingLayouts[1].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
-	bindingLayouts[1].buffer.type = wgpu::BufferBindingType::Uniform;
-	bindingLayouts[1].buffer.minBindingSize = sizeof(time);
-	bindingLayouts[1].buffer.hasDynamicOffset = false;
-
-	// Create a bind group layout
-	wgpu::BindGroupLayoutDescriptor bindGroupLayoutDesc{};
-	bindGroupLayoutDesc.label = "Waylib Instance Data Bind Group Layout";
-	bindGroupLayoutDesc.entryCount = 1;
-	bindGroupLayoutDesc.entries = &bindingLayouts[0];
-	// G0 == Instance Data
-	global.bindGroupLayouts[0] = state.device.createBindGroupLayout(bindGroupLayoutDesc);
-	bindGroupLayoutDesc.label = "Waylib Time Data Bind Group Layout";
-	bindGroupLayoutDesc.entryCount = 1;
-	bindGroupLayoutDesc.entries = &bindingLayouts[1];
-	// G1 == Time Data
-	global.bindGroupLayouts[1] = state.device.createBindGroupLayout(bindGroupLayoutDesc);
-
-	wgpu::PipelineLayoutDescriptor layoutDesc;
-	layoutDesc.bindGroupLayoutCount = global.bindGroupLayouts.size();
-	layoutDesc.bindGroupLayouts = global.bindGroupLayouts.data();
-	global.layout = state.device.createPipelineLayout(layoutDesc);
-
-	global.created = true;
-	return global;
-}
+// Defined in common.cpp
+pipeline_globals& create_pipeline_globals(wgpu_state state);
 
 //////////////////////////////////////////////////////////////////////
 // #Miscelanious
@@ -65,34 +21,6 @@ pipeline_globals& create_pipeline_globals(webgpu_state state) {
 
 wgpu::Color to_webgpu(const color& color) {
 	return {color.r, color.g, color.b, color.a};
-}
-
-static std::string error_message = "";
-
-const char* get_error_message() {
-	if(error_message.empty()) return nullptr;
-	return error_message.c_str();
-}
-
-void set_error_message_raw(const char* message) {
-	error_message = message;
-}
-void set_error_message(const std::string_view view) {
-	error_message = std::string(view);
-}
-void set_error_message(const std::string& str) {
-	error_message = str;
-}
-
-void clear_error_message() {
-	set_error_message_raw("");
-}
-std::string get_error_message_and_clear() {
-	const char* msg = get_error_message();
-	if(!msg) return "";
-	std::string out = msg;
-	clear_error_message();
-	return out;
 }
 
 void time_calculations(time& time) WAYLIB_TRY {
@@ -110,7 +38,7 @@ void time_calculations(time& time) WAYLIB_TRY {
 } WAYLIB_CATCH()
 void time_calculations(time* time) { time_calculations(*time); }
 
-void time_upload(webgpu_frame_state& frame, time& time) WAYLIB_TRY {
+void time_upload(wgpu_frame_state& frame, time& time) WAYLIB_TRY {
 	static wgpu::Buffer timeBuffer = [&frame] {
 		WGPUBufferDescriptor bufferDesc = {
 			.label = "Waylib Time Buffer",
@@ -137,7 +65,7 @@ void time_upload(webgpu_frame_state& frame, time& time) WAYLIB_TRY {
 	frame.state.device.getQueue().writeBuffer(timeBuffer, 0, &time, sizeof(time));
 	frame.render_pass.setBindGroup(1, bindGroup, 0, nullptr);
 } WAYLIB_CATCH()
-void time_upload(webgpu_frame_state* frame, time* time) {
+void time_upload(wgpu_frame_state* frame, time* time) {
 	time_upload(*frame, *time);
 }
 
@@ -195,13 +123,13 @@ void release_device(WGPUDevice device, bool also_release_adapter /*= true*/, boo
 	if(also_release_instance) wgpuInstanceRelease(instance);
 } WAYLIB_CATCH()
 
-void release_webgpu_state(webgpu_state state) WAYLIB_TRY {
+void release_wgpu_state(wgpu_state state) WAYLIB_TRY {
 	state.device.getQueue().release();
 	state.surface.release();
 	release_device(state.device, true, true);
 } WAYLIB_CATCH()
 
-bool configure_surface(webgpu_state state, vec2i size, surface_configuration config /*= {}*/) WAYLIB_TRY {
+bool configure_surface(wgpu_state state, vec2i size, surface_configuration config /*= {}*/) WAYLIB_TRY {
 	// Configure the surface
 	wgpu::SurfaceConfiguration descriptor = {};
 
@@ -245,6 +173,7 @@ namespace detail {
 	std::optional<std::string> preprocess_shader_from_memory(shader_preprocessor* processor, const std::string& _data, const preprocess_shader_config& config);
 	std::optional<std::string> preprocess_shader_from_memory_and_cache(shader_preprocessor* processor, const std::string& _data, const std::filesystem::path& path, preprocess_shader_config config);
 	std::optional<std::string> preprocess_shader(shader_preprocessor* processor, const std::filesystem::path& path, const preprocess_shader_config& config);
+	void preprocessor_initalize_platform_defines(shader_preprocessor* preprocessor, wgpu::Adapter adapter);
 }
 
 shader_preprocessor* create_shader_preprocessor() WAYLIB_TRY {
@@ -255,9 +184,29 @@ void release_shader_preprocessor(shader_preprocessor* processor) WAYLIB_TRY {
 	delete processor;
 } WAYLIB_CATCH()
 
-void preprocessor_add_define(shader_preprocessor* processor, const char* name, const char* value) WAYLIB_TRY {
+shader_preprocessor* preprocessor_initialize_virtual_filesystem(shader_preprocessor* processor, wgpu_state state, preprocess_shader_config config /*= {}*/) WAYLIB_TRY {
+	if(processor->defines.find("WGPU_ADAPTER_TYPE") == std::string::npos)
+		preprocessor_initalize_platform_defines(processor, state);
+
+	preprocess_shader_from_memory_and_cache(processor,
+#include "shaders/waylib/time.wgsl"
+		, "waylib/time", config);
+	preprocess_shader_from_memory_and_cache(processor,
+#include "shaders/waylib/instance.wgsl"
+		, "waylib/instance", config);
+	preprocess_shader_from_memory_and_cache(processor,
+#include "shaders/waylib/vertex.wgsl"
+		, "waylib/vertex", config);
+	preprocess_shader_from_memory_and_cache(processor,
+#include "shaders/waylib/wireframe.wgsl"
+		, "waylib/wireframe", config);
+	return processor;
+} WAYLIB_CATCH(nullptr)
+
+shader_preprocessor* preprocessor_add_define(shader_preprocessor* processor, const char* name, const char* value) WAYLIB_TRY {
 	processor->defines += "#define " + std::string(name) + " " + value + "\n";
-} WAYLIB_CATCH()
+	return processor;
+} WAYLIB_CATCH(nullptr)
 
 bool preprocessor_add_search_path(shader_preprocessor* processor, const char* _path) WAYLIB_TRY {
 	auto path = std::filesystem::absolute(_path);
@@ -266,6 +215,11 @@ bool preprocessor_add_search_path(shader_preprocessor* processor, const char* _p
 	processor->search_paths.emplace(path);
 	return true;
 } WAYLIB_CATCH(false)
+
+shader_preprocessor* preprocessor_initalize_platform_defines(shader_preprocessor* processor, wgpu_state state) WAYLIB_TRY {
+	detail::preprocessor_initalize_platform_defines(processor, state.device.getAdapter());
+	return processor;
+} WAYLIB_CATCH(nullptr)
 
 const char* preprocessor_get_cached_file(shader_preprocessor* processor, const char* path) WAYLIB_TRY {
 	static std::string cache;
@@ -295,7 +249,7 @@ const char* preprocess_shader(shader_preprocessor* processor, const char* path, 
 	return nullptr;
 } WAYLIB_CATCH(nullptr)
 
-WAYLIB_OPTIONAL(shader) create_shader(webgpu_state state, const char* wgsl_source_code, create_shader_configuration config /*= {}*/) WAYLIB_TRY {
+WAYLIB_OPTIONAL(shader) create_shader(wgpu_state state, const char* wgsl_source_code, create_shader_configuration config /*= {}*/) WAYLIB_TRY {
 	wgpu::ShaderModuleDescriptor shaderDesc;
 	shaderDesc.label = config.name;
 #ifdef WEBGPU_BACKEND_WGPU
@@ -327,7 +281,7 @@ WAYLIB_OPTIONAL(shader) create_shader(webgpu_state state, const char* wgsl_sourc
 // #Begin/End Drawing
 //////////////////////////////////////////////////////////////////////
 
-WAYLIB_OPTIONAL(webgpu_frame_state) begin_drawing_render_texture(webgpu_state state, WGPUTextureView render_texture, vec2i render_texture_dimensions, WAYLIB_OPTIONAL(color) clear_color /*= {}*/) WAYLIB_TRY {
+WAYLIB_OPTIONAL(wgpu_frame_state) begin_drawing_render_texture(wgpu_state state, WGPUTextureView render_texture, vec2i render_texture_dimensions, WAYLIB_OPTIONAL(color) clear_color /*= {}*/) WAYLIB_TRY {
 	static WGPUTextureViewDescriptor depthTextureViewDesc = {
 		.format = depth_texture_format,
 		.dimension = wgpu::TextureViewDimension::_2D,
@@ -406,12 +360,12 @@ WAYLIB_OPTIONAL(webgpu_frame_state) begin_drawing_render_texture(webgpu_state st
 	// Create the render pass and end it immediately (we only clear the screen but do not draw anything)
 	wgpu::RenderPassEncoder renderPass = encoder.beginRenderPass(renderPassDesc);
 
-	webgpu_frame_state out = {state, render_texture, depthTexture, depthTextureView, encoder, renderPass};
+	wgpu_frame_state out = {state, render_texture, depthTexture, depthTextureView, encoder, renderPass};
 	out.get_current_view_projection_matrix() = glm::identity<glm::mat4x4>();
 	return out;
 } WAYLIB_CATCH({})
 
-WAYLIB_OPTIONAL(webgpu_frame_state) begin_drawing(webgpu_state state, WAYLIB_OPTIONAL(color) clear_color /*= {}*/) WAYLIB_TRY {
+WAYLIB_OPTIONAL(wgpu_frame_state) begin_drawing(wgpu_state state, WAYLIB_OPTIONAL(color) clear_color /*= {}*/) WAYLIB_TRY {
 	// Get the surface texture
 	wgpu::SurfaceTexture surfaceTexture;
 	state.surface.getCurrentTexture(&surfaceTexture);
@@ -433,7 +387,7 @@ WAYLIB_OPTIONAL(webgpu_frame_state) begin_drawing(webgpu_state state, WAYLIB_OPT
 	return begin_drawing_render_texture(state, texture.createView(viewDescriptor), {texture.getWidth(), texture.getHeight()}, clear_color);
 } WAYLIB_CATCH({})
 
-void end_drawing(webgpu_frame_state& frame) WAYLIB_TRY {
+void end_drawing(wgpu_frame_state& frame) WAYLIB_TRY {
 	frame.render_pass.end();
 	frame.render_pass.release();
 
@@ -481,24 +435,24 @@ mat4x4f camera2D_get_matrix(camera2D& camera, vec2i window_dimensions) {
 }
 mat4x4f camera2D_get_matrix(camera2D* camera, vec2i window_dimensions) { return camera2D_get_matrix(*camera, window_dimensions); }
 
-void begin_camera_mode3D(webgpu_frame_state& frame, camera3D& camera, vec2i window_dimensions) {
+void begin_camera_mode3D(wgpu_frame_state& frame, camera3D& camera, vec2i window_dimensions) {
 	frame.get_current_view_projection_matrix() = camera3D_get_matrix(camera, window_dimensions);
 }
-void begin_camera_mode3D(webgpu_frame_state* frame, camera3D* camera, vec2i window_dimensions) {
+void begin_camera_mode3D(wgpu_frame_state* frame, camera3D* camera, vec2i window_dimensions) {
 	begin_camera_mode3D(*frame, *camera, window_dimensions);
 }
 
-void begin_camera_mode2D(webgpu_frame_state& frame, camera2D& camera, vec2i window_dimensions) {
+void begin_camera_mode2D(wgpu_frame_state& frame, camera2D& camera, vec2i window_dimensions) {
 	frame.get_current_view_projection_matrix() = camera2D_get_matrix(camera, window_dimensions);
 }
-void begin_camera_mode2D(webgpu_frame_state* frame, camera2D* camera, vec2i window_dimensions) {
+void begin_camera_mode2D(wgpu_frame_state* frame, camera2D* camera, vec2i window_dimensions) {
 	begin_camera_mode2D(*frame, *camera, window_dimensions);
 }
 
-void end_camera_mode(webgpu_frame_state& frame) {
+void end_camera_mode(wgpu_frame_state& frame) {
 	frame.get_current_view_projection_matrix() = glm::identity<glm::mat4x4>();
 }
-void end_camera_mode(webgpu_frame_state* frame) {
+void end_camera_mode(wgpu_frame_state* frame) {
 	end_camera_mode(*frame);
 }
 #endif // WAYLIB_NO_CAMERAS

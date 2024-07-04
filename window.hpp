@@ -1,7 +1,5 @@
 #pragma once
-#include <cstdint>
-#include <cstddef>
-#include <string>
+#include "common.hpp"
 
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
@@ -33,13 +31,13 @@ wgpu::Surface window_get_surface(
 
 #ifndef WAYLIB_NO_CAMERAS
 void window_begin_camera_mode3D(
-	webgpu_frame_state& frame,
+	wgpu_frame_state& frame,
 	window* window,
 	camera3D& camera
 );
 
 void window_begin_camera_mode2D(
-	webgpu_frame_state& frame,
+	wgpu_frame_state& frame,
 	window* window,
 	camera2D& camera
 );

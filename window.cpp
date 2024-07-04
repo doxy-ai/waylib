@@ -106,25 +106,25 @@ wgpu::Surface window_get_surface(window* window, wgpu::Device device) {
 	return glfwGetWGPUSurface(device.getAdapter().getInstance(), window);
 }
 
-webgpu_state window_get_webgpu_state(window* window, WGPUDevice _device) {
+wgpu_state window_get_wgpu_state(window* window, WGPUDevice _device) {
 	wgpu::Device& device = WAYLIB_C_TO_CPP_CONVERSION(wgpu::Device, _device);
 	return {device, window_get_surface(window, device)};
 }
 
 bool window_configure_surface(
-	window* window, webgpu_state state,
+	window* window, wgpu_state state,
 	surface_configuration config /*= {}*/
 ) {
 	return configure_surface(state, window_get_dimensions(window), config);
 }
 
 void window_automatically_reconfigure_surface_on_resize(
-	window* window, webgpu_state state,
+	window* window, wgpu_state state,
 	surface_configuration config /*= {}*/
 ) {
 	struct ResizeData {
 		char magic[5] = "ReDa";
-		webgpu_state state;
+		wgpu_state state;
 		surface_configuration config;
 	};
 
@@ -141,7 +141,7 @@ void window_automatically_reconfigure_surface_on_resize(
 	});
 }
 
-webgpu_state create_default_device_from_window(window* window, bool prefer_low_power /*= false*/) {
+wgpu_state create_default_device_from_window(window* window, bool prefer_low_power /*= false*/) {
 	WGPUInstance instance = wgpuCreateInstance({});
 	wgpu::Surface surface = window_get_surface(window, instance);
 	return {
@@ -151,17 +151,17 @@ webgpu_state create_default_device_from_window(window* window, bool prefer_low_p
 }
 
 #ifndef WAYLIB_NO_CAMERAS
-void window_begin_camera_mode3D(webgpu_frame_state* frame, window* window, camera3D* camera) {
+void window_begin_camera_mode3D(wgpu_frame_state* frame, window* window, camera3D* camera) {
 	begin_camera_mode3D(*frame, *camera, window_get_dimensions(window));
 }
-void window_begin_camera_mode3D(webgpu_frame_state& frame, window* window, camera3D& camera) {
+void window_begin_camera_mode3D(wgpu_frame_state& frame, window* window, camera3D& camera) {
 	begin_camera_mode3D(frame, camera, window_get_dimensions(window));
 }
 
-void window_begin_camera_mode2D(webgpu_frame_state* frame, window* window, camera2D* camera) {
+void window_begin_camera_mode2D(wgpu_frame_state* frame, window* window, camera2D* camera) {
 	begin_camera_mode2D(*frame, *camera, window_get_dimensions(window));
 }
-void window_begin_camera_mode2D(webgpu_frame_state& frame, window* window, camera2D& camera) {
+void window_begin_camera_mode2D(wgpu_frame_state& frame, window* window, camera2D& camera) {
 	begin_camera_mode2D(frame, camera, window_get_dimensions(window));
 }
 #endif // WAYLIB_NO_CAMERAS
