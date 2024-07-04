@@ -2,6 +2,9 @@
 #include "window.hpp"
 #include "model.hpp"
 
+#include "waylib.h" // Here so it won't keep getting auto added at the top!
+#include "window.h"
+
 #include <iostream>
 
 const char* shaderSource = R"(

@@ -1,4 +1,5 @@
-#pragma once
+#ifndef WAYLIB_MATH_IS_AVAILABLE
+#define WAYLIB_MATH_IS_AVAILABLE
 #include "config.h"
 
 #ifdef __cplusplus
@@ -45,3 +46,5 @@ degree rad_to_deg(radian);
 #ifdef __cplusplus
 } // End extern "C"
 #endif
+
+#endif // WAYLIB_MATH_IS_AVAILABLE

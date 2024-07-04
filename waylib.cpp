@@ -7,9 +7,6 @@
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/ext/matrix_clip_space.hpp>
 
-#define TCPP_IMPLEMENTATION
-#include "thirdparty/tcppLibrary.hpp"
-
 #define OPEN_URL_NAMESPACE wl_detail
 #include "thirdparty/open.hpp"
 
@@ -98,7 +95,7 @@ std::string get_error_message_and_clear() {
 	return out;
 }
 
-void time_calculations(time& time) {
+void time_calculations(time& time) WAYLIB_TRY {
 	constexpr static float alpha = .9;
 	static std::chrono::system_clock::time_point last = std::chrono::system_clock::now();
 
@@ -110,10 +107,10 @@ void time_calculations(time& time) {
 	time.average_delta = time.average_delta * alpha + time.delta * (1 - alpha);
 
 	last = now;
-}
+} WAYLIB_CATCH()
 void time_calculations(time* time) { time_calculations(*time); }
 
-void time_upload(webgpu_frame_state& frame, time& time) {
+void time_upload(webgpu_frame_state& frame, time& time) WAYLIB_TRY {
 	static wgpu::Buffer timeBuffer = [&frame] {
 		WGPUBufferDescriptor bufferDesc = {
 			.label = "Waylib Time Buffer",
@@ -139,16 +136,16 @@ void time_upload(webgpu_frame_state& frame, time& time) {
 
 	frame.state.device.getQueue().writeBuffer(timeBuffer, 0, &time, sizeof(time));
 	frame.render_pass.setBindGroup(1, bindGroup, 0, nullptr);
-}
+} WAYLIB_CATCH()
 void time_upload(webgpu_frame_state* frame, time* time) {
 	time_upload(*frame, *time);
 }
 
-bool open_url(const char* url) {
+bool open_url(const char* url) WAYLIB_TRY {
 	return wl_detail::open_url(url);
-}
+} WAYLIB_CATCH(false)
 
-void process_wgpu_events([[maybe_unused]] Device device, [[maybe_unused]] bool yieldToWebBrowser = true) {
+void process_wgpu_events([[maybe_unused]] Device device, [[maybe_unused]] bool yieldToWebBrowser = true) WAYLIB_TRY {
 #if defined(WEBGPU_BACKEND_DAWN)
     device.tick();
 // #elif defined(WEBGPU_BACKEND_WGPU)
@@ -158,13 +155,13 @@ void process_wgpu_events([[maybe_unused]] Device device, [[maybe_unused]] bool y
         emscripten_sleep(10);
     }
 #endif
-}
+} WAYLIB_CATCH()
 
 //////////////////////////////////////////////////////////////////////
 // #WebGPU Defaults
 //////////////////////////////////////////////////////////////////////
 
-wgpu::Device create_default_device_from_instance(WGPUInstance instance, WGPUSurface surface /*= nullptr*/, bool prefer_low_power /*= false*/) {
+wgpu::Device create_default_device_from_instance(WGPUInstance instance, WGPUSurface surface /*= nullptr*/, bool prefer_low_power /*= false*/) WAYLIB_TRY {
 	wgpu::RequestAdapterOptions adapterOpts = {};
 	adapterOpts.compatibleSurface = surface;
 	adapterOpts.powerPreference = prefer_low_power ? wgpu::PowerPreference::LowPower : wgpu::PowerPreference::HighPerformance;
@@ -184,27 +181,27 @@ wgpu::Device create_default_device_from_instance(WGPUInstance instance, WGPUSurf
 		std::cout << std::endl;
 	};
 	return adapter.requestDevice(deviceDesc);
-}
+} WAYLIB_CATCH(nullptr)
 
 wgpu::Device create_default_device(WGPUSurface surface /*= nullptr*/, bool prefer_low_power /*= false*/) {
 	return create_default_device_from_instance(wgpuCreateInstance({}), surface, prefer_low_power);
 }
 
-void release_device(WGPUDevice device, bool also_release_adapter /*= true*/, bool also_release_instance /*= true*/) {
+void release_device(WGPUDevice device, bool also_release_adapter /*= true*/, bool also_release_instance /*= true*/) WAYLIB_TRY {
 	wgpu::Adapter adapter = WAYLIB_C_TO_CPP_CONVERSION(wgpu::Device, device).getAdapter();
 	wgpu::Instance instance = adapter.getInstance();
 	wgpuDeviceRelease(device);
 	if(also_release_adapter) wgpuAdapterRelease(adapter);
 	if(also_release_instance) wgpuInstanceRelease(instance);
-}
+} WAYLIB_CATCH()
 
-void release_webgpu_state(webgpu_state state) {
+void release_webgpu_state(webgpu_state state) WAYLIB_TRY {
 	state.device.getQueue().release();
 	state.surface.release();
 	release_device(state.device, true, true);
-}
+} WAYLIB_CATCH()
 
-bool configure_surface(webgpu_state state, vec2i size, surface_configuration config /*= {}*/) {
+bool configure_surface(webgpu_state state, vec2i size, surface_configuration config /*= {}*/) WAYLIB_TRY {
 	// Configure the surface
 	wgpu::SurfaceConfiguration descriptor = {};
 
@@ -237,185 +234,68 @@ bool configure_surface(webgpu_state state, vec2i size, surface_configuration con
 
 	state.surface.configure(descriptor);
 	return true;
-}
+} WAYLIB_CATCH(false)
 
 //////////////////////////////////////////////////////////////////////
 // #Shader (Preprocessor)
 //////////////////////////////////////////////////////////////////////
 
 namespace detail {
-	std::string remove_whitespace(const std::string& in) {
-		std::string out;
-		for(char c: in)
-			if(!std::isspace(c))
-				out += c;
-		return out;
-	}
-
-	std::string process_pragma_once(std::string data, const std::filesystem::path& path) {
-		if(auto once = data.find("#pragma once"); once != std::string::npos) {
-			std::string guard = path;
-			std::transform(guard.begin(), guard.end(), guard.begin(), [](char c) -> char {
-				if(!std::isalnum(c)) return '_';
-				return std::toupper(c);
-			});
-			guard = "__" + guard + "_GUARD__";
-			data.replace(once, 12, "#ifndef " + guard + "\n#define " + guard + "\n");
-			data += "#endif //" + guard + "\n";
-		}
-		return data;
-	}
-
-	std::optional<std::string> read_entire_file(std::filesystem::path path, const preprocess_shader_config& config = {}) {
-		std::ifstream fin(path);
-		if(!fin) {
-			set_error_message("Failed to open file `" + std::string(path) + "`... does it exist?");
-			return {};
-		}
-		fin.seekg(0, std::ios::end);
-		size_t size = fin.tellg();
-		fin.seekg(0, std::ios::beg);
-
-		std::string data(size + 1, '\n');
-		fin.read(data.data(), size);
-		if(config.support_pragma_once)
-			return process_pragma_once(data, path);
-		return data;
-	}
-
+	// Defined in shader_preprocessor.cpp
+	std::optional<std::string> preprocess_shader_from_memory(shader_preprocessor* processor, const std::string& _data, const preprocess_shader_config& config);
+	std::optional<std::string> preprocess_shader_from_memory_and_cache(shader_preprocessor* processor, const std::string& _data, const std::filesystem::path& path, preprocess_shader_config config);
 	std::optional<std::string> preprocess_shader(shader_preprocessor* processor, const std::filesystem::path& path, const preprocess_shader_config& config);
-
-	std::optional<std::string> preprocess_shader_from_memory(shader_preprocessor* processor, const std::string& _data, const preprocess_shader_config& config) {
-		struct PreprocessFailed {};
-
-		auto data = std::make_unique<tcpp::StringInputStream>(processor->defines + _data + "\n");
-		tcpp::Lexer lexer(std::move(data));
-		try {
-			tcpp::Preprocessor preprocessor(lexer, {[](const tcpp::TErrorInfo& info){
-				auto error = tcpp::ErrorTypeToString(info.mType);
-				if (error.empty()) error = "Unknown error";
-				error += " on line: " + std::to_string(info.mLine);
-				// TODO: Include that line of the input!
-				set_error_message(error);
-				throw PreprocessFailed{};
-			}, [&](const std::string& _path, bool isSystem){
-				std::filesystem::path path = _path;
-				if(processor->file_cache.find(path) != processor->file_cache.end())
-					return std::make_unique<tcpp::StringInputStream>(processor->file_cache[path]);
-
-				#define WAYLIB_NON_SYSTEM_PATHS {\
-					if(config.path) {\
-						auto relativeToConfig = std::filesystem::absolute(std::filesystem::path(config.path).parent_path() / path);\
-						if(std::filesystem::exists(relativeToConfig)){\
-							if(auto res = read_entire_file(relativeToConfig, config); res)\
-								return std::make_unique<tcpp::StringInputStream>(*res);\
-							else throw PreprocessFailed{};\
-						}\
-					}\
-					auto absolute = std::filesystem::absolute(path);\
-					if(std::filesystem::exists(absolute)) {\
-						if(auto res = read_entire_file(absolute, config); res)\
-							return std::make_unique<tcpp::StringInputStream>(*res);\
-						else throw PreprocessFailed{};\
-					}\
-				}
-				if(!isSystem) WAYLIB_NON_SYSTEM_PATHS
-
-				for(auto system: processor->search_paths) {
-					system = system / path;
-					if(std::filesystem::exists(system)) {
-						if(auto res = read_entire_file(system, config); res)
-							return std::make_unique<tcpp::StringInputStream>(*res);
-						else throw PreprocessFailed{};
-					}
-				}
-
-				if(isSystem) WAYLIB_NON_SYSTEM_PATHS
-				#undef WAYLIB_NON_SYSTEM_PATHS
-
-				set_error_message("Included file `" + std::string(path) + "` could not be found!");
-				throw PreprocessFailed{};
-			}, config.remove_comments});
-
-			if(config.remove_whitespace) return remove_whitespace(preprocessor.Process());
-			return preprocessor.Process();
-		} catch(PreprocessFailed) {
-			return {};
-		}
-	}
-
-	std::optional<std::string> preprocess_shader_from_memory_and_cache(shader_preprocessor* processor, const std::string& _data, const std::filesystem::path& path, preprocess_shader_config config) {
-		std::string data;
-		if(config.support_pragma_once) data = process_pragma_once(_data, path);
-		else data = _data;
-
-		config.path = path.c_str();
-		if(auto res = preprocess_shader_from_memory(processor, data, config); res) {
-			processor->file_cache[path] = data;
-			return *res;
-		}
-		return {};
-	}
-
-	std::optional<std::string> preprocess_shader(shader_preprocessor* processor, const std::filesystem::path& path, const preprocess_shader_config& config) {
-		if(processor->file_cache.find(path) != processor->file_cache.end())
-			return processor->file_cache[path];
-
-		auto data = read_entire_file(path, config);
-		if(!data) return {};
-		return preprocess_shader_from_memory_and_cache(processor, *data, path, config);
-	}
 }
 
-shader_preprocessor* create_shader_preprocessor() {
+shader_preprocessor* create_shader_preprocessor() WAYLIB_TRY {
 	return new shader_preprocessor();
-}
+} WAYLIB_CATCH(nullptr)
 
-void release_shader_preprocessor(shader_preprocessor* processor) {
+void release_shader_preprocessor(shader_preprocessor* processor) WAYLIB_TRY {
 	delete processor;
-}
+} WAYLIB_CATCH()
 
-void preprocessor_add_define(shader_preprocessor* processor, const char* name, const char* value) {
+void preprocessor_add_define(shader_preprocessor* processor, const char* name, const char* value) WAYLIB_TRY {
 	processor->defines += "#define " + std::string(name) + " " + value + "\n";
-}
+} WAYLIB_CATCH()
 
-bool preprocessor_add_search_path(shader_preprocessor* processor, const char* _path) {
+bool preprocessor_add_search_path(shader_preprocessor* processor, const char* _path) WAYLIB_TRY {
 	auto path = std::filesystem::absolute(_path);
 	if(!std::filesystem::exists(path)) return false;
 
 	processor->search_paths.emplace(path);
 	return true;
-}
+} WAYLIB_CATCH(false)
 
-const char* preprocessor_get_cached_file(shader_preprocessor* processor, const char* path) {
+const char* preprocessor_get_cached_file(shader_preprocessor* processor, const char* path) WAYLIB_TRY {
 	static std::string cache;
 	if(processor->file_cache.find(path) != processor->file_cache.end())
 		return (cache = processor->file_cache[path]).c_str();
 	return nullptr;
-}
+} WAYLIB_CATCH(nullptr)
 
-const char* preprocess_shader_from_memory(shader_preprocessor* processor, const char* data, preprocess_shader_config config /*= {}*/) {
+const char* preprocess_shader_from_memory(shader_preprocessor* processor, const char* data, preprocess_shader_config config /*= {}*/) WAYLIB_TRY {
 	static std::string cache;
 	if(auto res = detail::preprocess_shader_from_memory(processor, data, config); res)
 		return (cache = std::move(*res)).c_str();
 	return nullptr;
-}
+} WAYLIB_CATCH(nullptr)
 
-const char* preprocess_shader_from_memory_and_cache(shader_preprocessor* processor, const char* data, const char* path, preprocess_shader_config config /*= {}*/) {
+const char* preprocess_shader_from_memory_and_cache(shader_preprocessor* processor, const char* data, const char* path, preprocess_shader_config config /*= {}*/) WAYLIB_TRY {
 	static std::string cache;
 	if(auto res = detail::preprocess_shader_from_memory_and_cache(processor, data, path, config); res)
 		return (cache = std::move(*res)).c_str();
 	return nullptr;
-}
+} WAYLIB_CATCH(nullptr)
 
-const char* preprocess_shader(shader_preprocessor* processor, const char* path, preprocess_shader_config config /*= {}*/) {
+const char* preprocess_shader(shader_preprocessor* processor, const char* path, preprocess_shader_config config /*= {}*/) WAYLIB_TRY {
 	static std::string cache;
 	if(auto res = detail::preprocess_shader(processor, path, config); res)
 		return (cache = std::move(*res)).c_str();
 	return nullptr;
-}
+} WAYLIB_CATCH(nullptr)
 
-WAYLIB_OPTIONAL(shader) create_shader(webgpu_state state, const char* wgsl_source_code, create_shader_configuration config /*= {}*/) {
+WAYLIB_OPTIONAL(shader) create_shader(webgpu_state state, const char* wgsl_source_code, create_shader_configuration config /*= {}*/) WAYLIB_TRY {
 	wgpu::ShaderModuleDescriptor shaderDesc;
 	shaderDesc.label = config.name;
 #ifdef WEBGPU_BACKEND_WGPU
@@ -441,13 +321,13 @@ WAYLIB_OPTIONAL(shader) create_shader(webgpu_state state, const char* wgsl_sourc
 		.fragment_entry_point = config.fragment_entry_point,
 		.module = state.device.createShaderModule(shaderDesc)
 	}};
-}
+} WAYLIB_CATCH({})
 
 //////////////////////////////////////////////////////////////////////
 // #Begin/End Drawing
 //////////////////////////////////////////////////////////////////////
 
-WAYLIB_OPTIONAL(webgpu_frame_state) begin_drawing_render_texture(webgpu_state state, WGPUTextureView render_texture, vec2i render_texture_dimensions, WAYLIB_OPTIONAL(color) clear_color /*= {}*/) {
+WAYLIB_OPTIONAL(webgpu_frame_state) begin_drawing_render_texture(webgpu_state state, WGPUTextureView render_texture, vec2i render_texture_dimensions, WAYLIB_OPTIONAL(color) clear_color /*= {}*/) WAYLIB_TRY {
 	static WGPUTextureViewDescriptor depthTextureViewDesc = {
 		.format = depth_texture_format,
 		.dimension = wgpu::TextureViewDimension::_2D,
@@ -529,9 +409,9 @@ WAYLIB_OPTIONAL(webgpu_frame_state) begin_drawing_render_texture(webgpu_state st
 	webgpu_frame_state out = {state, render_texture, depthTexture, depthTextureView, encoder, renderPass};
 	out.get_current_view_projection_matrix() = glm::identity<glm::mat4x4>();
 	return out;
-}
+} WAYLIB_CATCH({})
 
-WAYLIB_OPTIONAL(webgpu_frame_state) begin_drawing(webgpu_state state, WAYLIB_OPTIONAL(color) clear_color /*= {}*/) {
+WAYLIB_OPTIONAL(webgpu_frame_state) begin_drawing(webgpu_state state, WAYLIB_OPTIONAL(color) clear_color /*= {}*/) WAYLIB_TRY {
 	// Get the surface texture
 	wgpu::SurfaceTexture surfaceTexture;
 	state.surface.getCurrentTexture(&surfaceTexture);
@@ -551,9 +431,9 @@ WAYLIB_OPTIONAL(webgpu_frame_state) begin_drawing(webgpu_state state, WAYLIB_OPT
 	viewDescriptor.aspect = wgpu::TextureAspect::All;
 
 	return begin_drawing_render_texture(state, texture.createView(viewDescriptor), {texture.getWidth(), texture.getHeight()}, clear_color);
-}
+} WAYLIB_CATCH({})
 
-void end_drawing(webgpu_frame_state& frame) {
+void end_drawing(webgpu_frame_state& frame) WAYLIB_TRY {
 	frame.render_pass.end();
 	frame.render_pass.release();
 
@@ -574,7 +454,7 @@ void end_drawing(webgpu_frame_state& frame) {
 
 	// Process callbacks
 	frame.state.device.tick();
-}
+} WAYLIB_CATCH()
 
 #ifndef WAYLIB_NO_CAMERAS
 mat4x4f camera3D_get_matrix(camera3D& camera, vec2i window_dimensions) {

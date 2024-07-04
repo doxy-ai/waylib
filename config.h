@@ -21,6 +21,20 @@
 	#define WAYLIB_C_OR_CPP_TYPE(ctype, cpptype) ctype
 #endif
 
+#include "thirdparty/macroutil.h"
+
+#if defined(__cplusplus) && defined(__cpp_exceptions)
+	#define WAYLIB_TRY try
+
+	// Catches any exception and returns its argument as the function's default value if it catches anything
+	#define WAYLIB_CATCH(...) OVERLOADED_MACRO(WAYLIB_CATCH, __VA_ARGS__)
+	#define WAYLIB_CATCH0() catch(std::exception e) { set_error_message_raw(e.what()); return; }
+	#define WAYLIB_CATCH1(ret) catch(std::exception e) { set_error_message_raw(e.what()); return ret; }
+#else
+	#define WAYLIB_TRY
+	#define WAYLIB_CATCH(...)
+#endif
+
 // Macros used for nicer cross platform enums
 #define WAYLIB_ENUM WAYLIB_C_OR_CPP_TYPE(enum, enum class)
 #define C_PREPEND(pre, base) WAYLIB_C_OR_CPP_TYPE(pre##base, base)

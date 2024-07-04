@@ -52,22 +52,22 @@ namespace detail {
 }
 
 
-WAYLIB_OPTIONAL(image) load_image(const char* file_path) {
+WAYLIB_OPTIONAL(image) load_image(const char* file_path) WAYLIB_TRY {
 	// auto extension = detail::get_extension(file_path);
 	// if(stbi_is_hdr(file_path))
 	// 	return detail::load_stb_image([file_path](int* x, int* y, int* c) { return stbi_loadf(file_path, x, y, c, 4); }, true);
 	if(IsEXR(file_path) == TINYEXR_SUCCESS)
 		return detail::load_exr([file_path](float** data, int* x, int* y, const char** err) { return LoadEXR(data, x, y, file_path, err); });
 	else return detail::load_stb_image([file_path](int* x, int* y, int* c) { return stbi_loadf(file_path, x, y, c, 4); }, true);
-}
+} WAYLIB_CATCH({})
 
-WAYLIB_OPTIONAL(image) load_image_from_memory(const unsigned char* data, size_t size) {
+WAYLIB_OPTIONAL(image) load_image_from_memory(const unsigned char* data, size_t size) WAYLIB_TRY {
 	// if(stbi_is_hdr_from_memory(data, size))
 	// 	return detail::load_stb_image([data, size](int* x, int* y, int* c) { return stbi_loadf_from_memory(data, size, x, y, c, 4); }, true);
 	if(IsEXRFromMemory(data, size) == TINYEXR_SUCCESS)
 		return detail::load_exr([data, size](float** out, int* x, int* y, const char** err) { return LoadEXRFromMemory(out, x, y, data, size, err); });
 	else return detail::load_stb_image([data, size](int* x, int* y, int* c) { return stbi_loadf_from_memory(data, size, x, y, c, 4); }, true);
-}
+} WAYLIB_CATCH({})
 WAYLIB_OPTIONAL(image) load_image_from_memory(std::span<std::byte> data) {
 	return load_image_from_memory((unsigned char*)data.data(), data.size());
 }

@@ -1,4 +1,6 @@
-#pragma once
+#ifndef WAYLIB_TEXTURE_IS_AVAILABLE
+#define WAYLIB_TEXTURE_IS_AVAILABLE
+
 #include "waylib.h"
 
 #ifdef __cplusplus
@@ -16,3 +18,5 @@ WAYLIB_OPTIONAL(image) load_image_from_memory(
 #ifdef __cplusplus
 } // End extern "C"
 #endif
+
+#endif // WAYLIB_TEXTURE_IS_AVAILABLE

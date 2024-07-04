@@ -1,4 +1,5 @@
-#pragma once
+#ifndef WAYLIB_MODEL_IS_AVAILABLE
+#define WAYLIB_MODEL_IS_AVAILABLE
 #include "texture.h"
 #include "waylib.h"
 
@@ -149,3 +150,5 @@ void model_draw(
 #ifdef __cplusplus
 } // End extern "C"
 #endif
+
+#endif // WAYLIB_MODEL_IS_AVAILABLE

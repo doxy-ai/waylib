@@ -1,4 +1,5 @@
-#pragma once
+#ifndef WAYLIB_WGSL_TYPES_IS_AVAILABLE
+#define WAYLIB_WGSL_TYPES_IS_AVAILABLE
 
 #include <cstdint>
 // #define GLM_FORCE_MESSAGES
@@ -83,3 +84,5 @@ WAYLIB_MATERIALIZE_TYPE(mat4x4f, mat4x4<float>, mat4x4);
 #ifdef WAYLIB_NAMESPACE_NAME
 } // End namespace
 #endif
+
+#endif // WAYLIB_WGSL_TYPES_IS_AVAILABLE

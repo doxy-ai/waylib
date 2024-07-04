@@ -1,4 +1,5 @@
-#pragma once
+#ifndef WAYLIB_IS_AVAILABLE
+#define WAYLIB_IS_AVAILABLE
 #include "math.h"
 
 #ifdef __cplusplus
@@ -456,3 +457,5 @@ void end_camera_mode(
 #ifdef __cplusplus
 } // End extern "C"
 #endif
+
+#endif // WAYLIB_IS_AVAILABLE

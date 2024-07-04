@@ -3,18 +3,29 @@ project(Waylib LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 
+if(CMAKE_BUILD_TYPE MATCHES Debug)
+	message("Debug Build... Some Optimizations Disabled")
+else()
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+endif()
+
+include(cmake/bundle.cmake)
+
 add_subdirectory(thirdparty/WebGPU-distribution)
 set(GLM_ENABLE_CXX_20 ON CACHE BOOL "Enable C++ 20")
 set(GLM_ENABLE_LANG_EXTENSIONS ON CACHE BOOL "Enable language extensions")
 add_subdirectory(thirdparty/glm)
 add_subdirectory(thirdparty/glfw3webgpu)
+set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "If the test suite for Assimp is built in addition to the library.")
 add_subdirectory(thirdparty/assimp)
 
-
-
-add_library(waylib waylib.cpp)
+add_library(waylib waylib.cpp shader_preprocessor.cpp)
 target_link_libraries(waylib PUBLIC webgpu glm::glm)
 target_compile_definitions(waylib PUBLIC WAYLIB_NAMESPACE_NAME=wl)
+if(CMAKE_BUILD_TYPE MATCHES Debug)
+else()
+    bundle_static_library(waylib waylib_bundled)
+endif()
 
 add_library(waylib_window window.cpp)
 add_library(waylib::window ALIAS waylib_window)

@@ -1,4 +1,6 @@
-#pragma once
+#ifndef WAYLIB_WINDOW_IS_AVAILABLE
+#define WAYLIB_WINDOW_IS_AVAILABLE
+
 #include "waylib.h"
 
 #ifdef __cplusplus
@@ -152,3 +154,5 @@ void window_begin_camera_mode2D(
 #ifdef __cplusplus
 } // End extern "C"
 #endif
+
+#endif // WAYLIB_WINDOW_IS_AVAILABLE
