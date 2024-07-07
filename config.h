@@ -74,3 +74,9 @@
 	#define WAYLIB_INDEX_TYPE uint32_t
 #endif
 typedef WAYLIB_INDEX_TYPE index_t;
+
+// Define the type of numbers... by default its a float
+#ifndef WAYLIB_REAL_TYPE
+	#define WAYLIB_REAL_TYPE float
+#endif
+typedef WAYLIB_REAL_TYPE real_t;

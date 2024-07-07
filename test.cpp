@@ -1,6 +1,6 @@
 #include "waylib.hpp"
 #include "window.hpp"
-#include "model.hpp"
+#include "obj_loader.hpp"
 
 #include "waylib.h" // Here so it won't keep getting auto added at the top!
 #include "window.h"
@@ -52,7 +52,7 @@ int main() {
 	});
 
 	// Load the shader module
-	wl::model model = wl::throw_if_null(wl::load_model(state, "../suzane.gltf"));
+	wl::model model = wl::throw_if_null(wl::load_obj_model("../suzane.obj")); 
 	model.material_count = 1;
 	wl::shader_preprocessor* p = wl::preprocessor_initialize_virtual_filesystem(wl::create_shader_preprocessor(), state);
 	wl::shader shader = wl::throw_if_null(wl::create_shader(
@@ -62,6 +62,7 @@ int main() {
 	wl::material mat = wl::create_material(state, shader);
 	model.materials = &mat;
 	model.mesh_materials = nullptr;
+	wl::model_upload(state, model);
 
 	wl::camera3D camera = {{0, 1, -1}, {0, 0, 0}};
 

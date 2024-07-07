@@ -89,6 +89,21 @@ void process_wgpu_events([[maybe_unused]] Device device, [[maybe_unused]] bool y
 // #WebGPU Defaults
 //////////////////////////////////////////////////////////////////////
 
+template<typename T>
+wgpu::IndexFormat calculate_index_format() {
+	static_assert(sizeof(T) == 2 || sizeof(T) == 4, "Index types must either be u16 or u32 convertable.");
+
+	if constexpr(sizeof(T) == 2)
+		return wgpu::IndexFormat::Uint16;
+	else return wgpu::IndexFormat::Uint32;
+}
+
+wgpu::TextureFormat surface_prefered_format(wgpu_state state) {
+	wgpu::SurfaceCapabilities capabilities;
+	state.surface.getCapabilities(state.device.getAdapter(), &capabilities); // TODO: Always returns error?
+	return capabilities.formats[0];
+}
+
 wgpu::Device create_default_device_from_instance(WGPUInstance instance, WGPUSurface surface /*= nullptr*/, bool prefer_low_power /*= false*/) WAYLIB_TRY {
 	wgpu::RequestAdapterOptions adapterOpts = {};
 	adapterOpts.compatibleSurface = surface;
@@ -277,6 +292,124 @@ WAYLIB_OPTIONAL(shader) create_shader(wgpu_state state, const char* wgsl_source_
 	}};
 } WAYLIB_CATCH({})
 
+namespace detail{
+	std::pair<wgpu::RenderPipelineDescriptor, WAYLIB_OPTIONAL(wgpu::FragmentState)> shader_configure_render_pipeline_descriptor(wgpu_state state, shader& shader, wgpu::RenderPipelineDescriptor pipelineDesc = {}) {
+		static WGPUBlendState blendState = {
+			.color = {
+				.operation = wgpu::BlendOperation::Add,
+				.srcFactor = wgpu::BlendFactor::SrcAlpha,
+				.dstFactor = wgpu::BlendFactor::OneMinusSrcAlpha,
+			},
+			.alpha = {
+				.operation = wgpu::BlendOperation::Add,
+				.srcFactor = wgpu::BlendFactor::One,
+				.dstFactor = wgpu::BlendFactor::Zero,
+			},
+		};
+		thread_local static WGPUColorTargetState colorTarget = {
+			.nextInChain = nullptr,
+			.format = surface_prefered_format(state),
+			.blend = &blendState,
+			.writeMask = wgpu::ColorWriteMask::All,
+		};
+
+		static WGPUVertexAttribute positionAttribute = {
+			.format = wgpu::VertexFormat::Float32x3,
+			.offset = 0,
+			.shaderLocation = 0,
+		};
+		static WGPUVertexBufferLayout positionLayout = {
+			.arrayStride = sizeof(vec3f),
+			.stepMode = wgpu::VertexStepMode::Vertex,
+			.attributeCount = 1,
+			.attributes = &positionAttribute,
+		};
+
+		static WGPUVertexAttribute texcoordAttribute = {
+			.format = wgpu::VertexFormat::Float32x2,
+			.offset = 0,
+			.shaderLocation = 1,
+		};
+		static WGPUVertexBufferLayout texcoordLayout = {
+			.arrayStride = sizeof(vec2f),
+			.stepMode = wgpu::VertexStepMode::Vertex,
+			.attributeCount = 1,
+			.attributes = &texcoordAttribute,
+		};
+
+		static WGPUVertexAttribute normalAttribute = {
+			.format = wgpu::VertexFormat::Float32x3,
+			.offset = 0,
+			.shaderLocation = 2,
+		};
+		static WGPUVertexBufferLayout normalLayout = {
+			.arrayStride = sizeof(vec3f),
+			.stepMode = wgpu::VertexStepMode::Vertex,
+			.attributeCount = 1,
+			.attributes = &normalAttribute,
+		};
+
+		static WGPUVertexAttribute colorAttribute = {
+			.format = wgpu::VertexFormat::Float32x4,
+			.offset = 0,
+			.shaderLocation = 3,
+		};
+		static WGPUVertexBufferLayout colorLayout = {
+			.arrayStride = sizeof(color),
+			.stepMode = wgpu::VertexStepMode::Vertex,
+			.attributeCount = 1,
+			.attributes = &colorAttribute,
+		};
+
+		static WGPUVertexAttribute tangentAttribute = {
+			.format = wgpu::VertexFormat::Float32x4,
+			.offset = 0,
+			.shaderLocation = 4,
+		};
+		static WGPUVertexBufferLayout tangentLayout = {
+			.arrayStride = sizeof(vec4f),
+			.stepMode = wgpu::VertexStepMode::Vertex,
+			.attributeCount = 1,
+			.attributes = &tangentAttribute,
+		};
+
+		static WGPUVertexAttribute texcoord2Attribute = {
+			.format = wgpu::VertexFormat::Float32x2,
+			.offset = 0,
+			.shaderLocation = 5,
+		};
+		static WGPUVertexBufferLayout texcoord2Layout = {
+			.arrayStride = sizeof(vec2f),
+			.stepMode = wgpu::VertexStepMode::Vertex,
+			.attributeCount = 1,
+			.attributes = &texcoord2Attribute,
+		};
+		static std::array<WGPUVertexBufferLayout, 6> buffers = {positionLayout, texcoordLayout, normalLayout, colorLayout, tangentLayout, texcoord2Layout};
+
+		if(shader.vertex_entry_point) {
+			pipelineDesc.vertex.bufferCount = buffers.size();
+			pipelineDesc.vertex.buffers = buffers.data();
+			pipelineDesc.vertex.constantCount = 0;
+			pipelineDesc.vertex.constants = nullptr;
+			pipelineDesc.vertex.entryPoint = shader.vertex_entry_point;
+			pipelineDesc.vertex.module = shader.module;
+		}
+
+		if(shader.fragment_entry_point) {
+			wgpu::FragmentState fragment;
+			fragment.constantCount = 0;
+			fragment.constants = nullptr;
+			fragment.entryPoint = shader.fragment_entry_point;
+			fragment.module = shader.module;
+			fragment.targetCount = 1;
+			fragment.targets = &colorTarget;
+			pipelineDesc.fragment = &fragment;
+			return {pipelineDesc, fragment};
+		}
+		return {pipelineDesc, {}};
+	}
+}
+
 //////////////////////////////////////////////////////////////////////
 // #Begin/End Drawing
 //////////////////////////////////////////////////////////////////////
@@ -456,6 +589,254 @@ void end_camera_mode(wgpu_frame_state* frame) {
 	end_camera_mode(*frame);
 }
 #endif // WAYLIB_NO_CAMERAS
+
+//////////////////////////////////////////////////////////////////////
+// #Mesh
+//////////////////////////////////////////////////////////////////////
+
+void mesh_upload(wgpu_state state, mesh& mesh) WAYLIB_TRY {
+	size_t biggest = std::max(mesh.vertexCount * sizeof(vec4f), mesh.triangleCount * sizeof(index_t) * 3);
+	std::vector<std::byte> zeroBuffer(biggest, std::byte{});
+
+	wgpu::BufferDescriptor bufferDesc;
+	bufferDesc.label = "Waylib Vertex Buffer";
+	bufferDesc.size = mesh.vertexCount * sizeof(vec2f) * 2
+		+ mesh.vertexCount * sizeof(vec3f) * 2
+		+ mesh.vertexCount * sizeof(vec4f) * 1
+		+ mesh.vertexCount * sizeof(color) * 1;
+	bufferDesc.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Vertex; // Vertex usage here!
+	bufferDesc.mappedAtCreation = false;
+	if(mesh.buffer) mesh.buffer.release();
+	mesh.buffer = state.device.createBuffer(bufferDesc);
+
+	// Upload geometry data to the buffer
+	size_t currentOffset = 0;
+	wgpu::Queue queue = state.device.getQueue();
+	{ // Position
+		void* data = mesh.positions ? (void*)mesh.positions : (void*)zeroBuffer.data();
+		queue.writeBuffer(mesh.buffer, currentOffset, data, mesh.vertexCount * sizeof(vec3f));
+		currentOffset += mesh.vertexCount * sizeof(vec3f);
+	}
+	{ // Texcoords
+		void* data = mesh.texcoords ? (void*)mesh.texcoords : (void*)zeroBuffer.data();
+		queue.writeBuffer(mesh.buffer, currentOffset, data, mesh.vertexCount * sizeof(vec2f));
+		currentOffset += mesh.vertexCount * sizeof(vec2f);
+	}
+	{ // Texcoords2
+		void* data = mesh.texcoords2 ? (void*)mesh.texcoords2 : (void*)zeroBuffer.data();
+		queue.writeBuffer(mesh.buffer, currentOffset, data, mesh.vertexCount * sizeof(vec2f));
+		currentOffset += mesh.vertexCount * sizeof(vec2f);
+	}
+	{ // Normals
+		void* data = mesh.normals ? (void*)mesh.normals : (void*)zeroBuffer.data();
+		queue.writeBuffer(mesh.buffer, currentOffset, data, mesh.vertexCount * sizeof(vec3f));
+		currentOffset += mesh.vertexCount * sizeof(vec3f);
+	}
+	{ // Tangents
+		void* data = mesh.tangents ? (void*)mesh.tangents : (void*)zeroBuffer.data();
+		queue.writeBuffer(mesh.buffer, currentOffset, data, mesh.vertexCount * sizeof(vec4f));
+		currentOffset += mesh.vertexCount * sizeof(vec4f);
+	}
+	{ // Colors
+		void* data = mesh.colors ? (void*)mesh.colors : (void*)zeroBuffer.data();
+		queue.writeBuffer(mesh.buffer, currentOffset, data, mesh.vertexCount * sizeof(color));
+		currentOffset += mesh.vertexCount * sizeof(color);
+	}
+	if(mesh.indices) {
+		wgpu::BufferDescriptor bufferDesc;
+		bufferDesc.label = "Vertex Position Buffer";
+		bufferDesc.size = mesh.triangleCount * sizeof(index_t) * 3;
+		bufferDesc.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Index;
+		bufferDesc.mappedAtCreation = false;
+		if(mesh.indexBuffer) mesh.indexBuffer.release();
+		mesh.indexBuffer = state.device.createBuffer(bufferDesc);
+
+		queue.writeBuffer(mesh.indexBuffer, 0, mesh.indices, mesh.triangleCount * sizeof(index_t) * 3);
+	} else if(mesh.indexBuffer) mesh.indexBuffer.release();
+} WAYLIB_CATCH()
+void mesh_upload(wgpu_state state, mesh* mesh) {
+	mesh_upload(state, *mesh);
+}
+
+//////////////////////////////////////////////////////////////////////
+// #Material
+//////////////////////////////////////////////////////////////////////
+
+pipeline_globals& create_pipeline_globals(wgpu_state state); // Declared in waylib.cpp
+
+void material_upload(wgpu_state state, material& material, material_configuration config /*= {}*/) WAYLIB_TRY {
+	// Create the render pipeline
+	wgpu::RenderPipelineDescriptor pipelineDesc;
+	wgpu::FragmentState fragment;
+	for(size_t i = material.shaderCount; i--; ) { // Reverse itteration ensures that lower indexed shaders take precedence
+		WAYLIB_OPTIONAL(wgpu::FragmentState) fragmentOpt;
+		std::tie(pipelineDesc, fragmentOpt) = detail::shader_configure_render_pipeline_descriptor(state, material.shaders[i], pipelineDesc);
+		if(fragmentOpt.has_value) {
+			fragment = fragmentOpt.value;
+			pipelineDesc.fragment = &fragment;
+		}
+	}
+
+	// Each sequence of 3 vertices is considered as a triangle
+	pipelineDesc.primitive.topology = wgpu::PrimitiveTopology::TriangleList;
+
+	// We'll see later how to specify the order in which vertices should be
+	// connected. When not specified, vertices are considered sequentially.
+	pipelineDesc.primitive.stripIndexFormat = wgpu::IndexFormat::Undefined;
+
+	// The face orientation is defined by assuming that when looking
+	// from the front of the face, its corner vertices are enumerated
+	// in the counter-clockwise (CCW) order.
+	pipelineDesc.primitive.frontFace = wgpu::FrontFace::CCW;
+
+	// But the face orientation does not matter much because we do not
+	// cull (i.e. "hide") the faces pointing away from us (which is often
+	// used for optimization).
+	pipelineDesc.primitive.cullMode = wgpu::CullMode::None; // = wgpu::CullMode::Back;
+
+	// We setup a depth buffer state for the render pipeline
+	wgpu::DepthStencilState depthStencilState = wgpu::Default;
+	// Keep a fragment only if its depth is lower than the previously blended one
+	depthStencilState.depthCompare = config.depth_function.has_value ? config.depth_function.value : wgpu::CompareFunction::Undefined;
+	// Each time a fragment is blended into the target, we update the value of the Z-buffer
+	depthStencilState.depthWriteEnabled = config.depth_function.has_value;
+	// Store the format in a variable as later parts of the code depend on it
+	depthStencilState.format = depth_texture_format;
+	// Deactivate the stencil alltogether
+	depthStencilState.stencilReadMask = 0;
+	depthStencilState.stencilWriteMask = 0;
+	pipelineDesc.depthStencil = &depthStencilState;
+
+	// Samples per pixel
+	pipelineDesc.multisample.count = 1;
+	// Default value for the mask, meaning "all bits on"
+	pipelineDesc.multisample.mask = ~0u;
+	// Default value as well (irrelevant for count = 1 anyways)
+	pipelineDesc.multisample.alphaToCoverageEnabled = false;
+	// Associate with the global layout
+	pipelineDesc.layout = create_pipeline_globals(state).layout;
+
+	if(material.pipeline) material.pipeline.release();
+	material.pipeline = state.device.createRenderPipeline(pipelineDesc);
+} WAYLIB_CATCH()
+void material_upload(wgpu_state state, material* material, material_configuration config /*= {}*/) {
+	material_upload(state, *material, config);
+}
+
+material create_material(wgpu_state state, shader* shaders, size_t shader_count, material_configuration config /*= {}*/) {
+	material out {.shaderCount = (index_t)shader_count, .shaders = shaders};
+	material_upload(state, out, config);
+	return out;
+}
+material create_material(wgpu_state state, std::span<shader> shaders, material_configuration config /*= {}*/) {
+	return create_material(state, shaders.data(), shaders.size(), config);
+}
+material create_material(wgpu_state state, shader& shader, material_configuration config /*= {}*/) {
+	return create_material(state, &shader, 1, config);
+}
+
+//////////////////////////////////////////////////////////////////////
+// #Model
+//////////////////////////////////////////////////////////////////////
+
+void model_upload(wgpu_state state, model& model) {
+	for(size_t i = 0; i < model.mesh_count; ++i)
+		mesh_upload(state, model.meshes[i]);
+	for(size_t i = 0; i < model.material_count; ++i)
+		material_upload(state, model.materials[i]);
+}
+void model_upload(wgpu_state state, model* model) {
+	model_upload(state, *model);
+}
+
+void model_draw_instanced(wgpu_frame_state& frame, model& model, std::span<model_instance_data> instances) WAYLIB_TRY {
+	static WGPUBufferDescriptor bufferDesc = {
+		.label = "Waylib Instance Buffer",
+		.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Storage,
+		.size = sizeof(model_instance_data),
+		.mappedAtCreation = false,
+	};
+	static wgpu::Buffer instanceBuffer;
+	static wgpu::BindGroup bindGroup;
+
+	if(instances.size() > 0) {
+#ifndef WAYLIB_NO_CAMERAS
+		for(auto& data: instances)
+			data.get_transform() = frame.get_current_view_projection_matrix() * data.get_transform();
+#endif // WAYLIB_NO_CAMERAS
+
+		if(!instanceBuffer || instanceBuffer.getSize() < sizeof(model_instance_data) * instances.size()) {
+			if(instanceBuffer) instanceBuffer.release();
+			bufferDesc.size = sizeof(model_instance_data) * instances.size();
+			instanceBuffer = frame.state.device.createBuffer(bufferDesc);
+		}
+		frame.state.device.getQueue().writeBuffer(instanceBuffer, 0, instances.data(), sizeof(model_instance_data) * instances.size());
+
+		std::array<WGPUBindGroupEntry, 1> bindings = {WGPUBindGroupEntry{
+			.binding = 0,
+			.buffer = instanceBuffer,
+			.offset = 0,
+			.size = sizeof(model_instance_data) * instances.size(),
+		}};
+		wgpu::BindGroupDescriptor bindGroupDesc = wgpu::Default;
+		bindGroupDesc.layout = create_pipeline_globals(frame.state).bindGroupLayouts[0]; // Group 0 is instance data
+		bindGroupDesc.entryCount = bindings.size();
+		bindGroupDesc.entries = bindings.data();
+		
+		if(bindGroup) bindGroup.release();
+		bindGroup = frame.state.device.createBindGroup(bindGroupDesc);
+		frame.render_pass.setBindGroup(0, bindGroup, 0, nullptr);
+	}
+
+	for(size_t i = 0; i < model.mesh_count; ++i) {
+		// Select which render pipeline to use
+		frame.render_pass.setPipeline(model.materials[model.get_material_index_for_mesh(i)].pipeline);
+
+		size_t currentOffset = 0;
+		auto& mesh = model.meshes[i];
+		{ // Position
+			frame.render_pass.setVertexBuffer(0, mesh.buffer, currentOffset, mesh.vertexCount * sizeof(vec3f));
+			currentOffset += mesh.vertexCount * sizeof(vec3f);
+		}
+		{ // Texcoord
+			frame.render_pass.setVertexBuffer(1, mesh.buffer, currentOffset, mesh.vertexCount * sizeof(vec2f));
+			currentOffset += mesh.vertexCount * sizeof(vec2f);
+		}
+		{ // Texcoord 2
+			frame.render_pass.setVertexBuffer(5, mesh.buffer, currentOffset, mesh.vertexCount * sizeof(vec2f));
+			currentOffset += mesh.vertexCount * sizeof(vec2f);
+		}
+		{ // Normals
+			frame.render_pass.setVertexBuffer(2, mesh.buffer, currentOffset, mesh.vertexCount * sizeof(vec3f));
+			currentOffset += mesh.vertexCount * sizeof(vec3f);
+		}
+		{ // Tangents
+			frame.render_pass.setVertexBuffer(4, mesh.buffer, currentOffset, mesh.vertexCount * sizeof(vec4f));
+			currentOffset += mesh.vertexCount * sizeof(vec4f);
+		}
+		{ // Colors
+			frame.render_pass.setVertexBuffer(3, mesh.buffer, currentOffset, mesh.vertexCount * sizeof(color));
+			currentOffset += mesh.vertexCount * sizeof(color);
+		}
+
+		if(mesh.indexBuffer) {
+			frame.render_pass.setIndexBuffer(mesh.indexBuffer, calculate_index_format<index_t>(), 0, mesh.indexBuffer.getSize());
+			frame.render_pass.drawIndexed(mesh.triangleCount * 3, std::max<size_t>(instances.size(), 1), 0, 0, 0);
+		} else
+			frame.render_pass.draw(model.meshes[i].vertexCount, std::max<size_t>(instances.size(), 1), 0, 0);
+	}
+} WAYLIB_CATCH()
+void model_draw_instanced(wgpu_frame_state* frame, model* model, model_instance_data* instances, size_t instance_count) {
+	model_draw_instanced(*frame, *model, {instances, instance_count});
+}
+
+void model_draw(wgpu_frame_state& frame, model& model) {
+	model_instance_data instance = {model.transform, {1, 1, 1, 1}};
+	model_draw_instanced(frame, model, {&instance, 1});
+}
+void model_draw(wgpu_frame_state* frame, model* model) {
+	model_draw(*frame, *model);
+}
 
 #ifdef WAYLIB_NAMESPACE_NAME
 }

@@ -84,6 +84,62 @@ void end_camera_mode(
 );
 #endif // WAYLIB_NO_CAMERAS
 
+void mesh_upload(
+	wgpu_state state,
+	mesh& mesh
+);
+
+void material_upload(
+	wgpu_state state,
+	material& material,
+	material_configuration config
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
+);
+
+material create_material(
+	wgpu_state state,
+	std::span<shader> shaders,
+	material_configuration config
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
+);
+material create_material(
+	wgpu_state state,
+	shader& shader,
+	material_configuration config
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
+);
+
+void model_upload(
+	wgpu_state state,
+	model& model
+);
+
+WAYLIB_OPTIONAL(model) load_model_from_memory(
+	wgpu_state state,
+	std::span<std::byte> data,
+	model_process_configuration config
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= default_model_process_configuration()
+#endif
+);
+
+void model_draw_instanced(
+	wgpu_frame_state& frame,
+	model& model,
+	std::span<model_instance_data> instances
+);
+
+void model_draw(
+	wgpu_frame_state& frame,
+	model& model
+);
+
 #ifdef WAYLIB_NAMESPACE_NAME
 }
 #endif

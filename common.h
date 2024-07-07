@@ -33,9 +33,20 @@ typedef struct image {
 	color* data;            // Image raw data
 	int width;              // Image base width
 	int height;             // Image base height
-	int mipmaps;            // Mipmap levels, 1 by default
-	// image_format format;    // Data format (PixelFormat type)
-	bool heap_allocated; // Wether or not this image is stored on the heap and should be automatically cleaned up
+	int mipmaps				// Mipmap levels, 1 by default
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= 1
+#endif
+	; int frames			// Number of frames in an animated image, 1 by default
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= 1
+#endif
+	// image_format format; // Data format (PixelFormat type)
+	; bool heap_allocated // Wether or not this image is stored on the heap and should be automatically cleaned up
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= false
+#endif
+	;
 } image;
 
 WAYLIB_ENUM texture_slot {
@@ -57,7 +68,11 @@ typedef struct texture {
 	WAYLIB_C_OR_CPP_TYPE(WGPUTexture, wgpu::Texture) gpu_data;
 	WAYLIB_C_OR_CPP_TYPE(WGPUTextureView, wgpu::TextureView) view; // TODO: Needed?
 	WAYLIB_OPTIONAL(WAYLIB_C_OR_CPP_TYPE(WGPUSampler, wgpu::Sampler)) sampler;
-	bool heap_allocated;// Wether or not this texture is stored on the heap and should be automatically cleaned up
+	bool heap_allocated // Wether or not this texture is stored on the heap and should be automatically cleaned up
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= false
+#endif
+	;
 } texture;
 
 // Shader
@@ -69,7 +84,11 @@ typedef struct shader {
 	const char* vertex_entry_point;
 	const char* fragment_entry_point;
 	WAYLIB_C_OR_CPP_TYPE(WGPUShaderModule, wgpu::ShaderModule) module;
-	bool heap_allocated;// Wether or not this shader is stored on the heap and should be automatically cleaned up
+	bool heap_allocated // Wether or not this shader is stored on the heap and should be automatically cleaned up
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= false
+#endif
+	;
 } shader;
 
 // Material
@@ -78,7 +97,11 @@ typedef struct material {
 	shader* shaders;
 	WAYLIB_OPTIONAL(texture) textures[WAYLIB_TEXTURE_SLOT_COUNT];
 	WAYLIB_C_OR_CPP_TYPE(WGPURenderPipeline, wgpu::RenderPipeline) pipeline;
-	bool heap_allocated;// Wether or not this material is stored on the heap and should be automatically cleaned up
+	bool heap_allocated // Wether or not this material is stored on the heap and should be automatically cleaned up
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= false
+#endif
+	;
 
 #ifdef WAYLIB_ENABLE_CLASSES
 	inline std::span<shader> get_shaders() { return {shaders, shaderCount}; }
@@ -106,7 +129,11 @@ typedef struct mesh {
 	vec3f* anim_normals;       // Animated normals (after bones transformations)
 	unsigned char* bone_ids;   // Vertex bone ids, max 255 bone ids, up to 4 bones influence by vertex (skinning)
 	vec4f* bone_weights;       // Vertex bone weight, up to 4 bones influence by vertex (skinning)
-	bool heap_allocated;// Wether or not this mesh is stored on the heap and should be automatically cleaned up
+	bool heap_allocated // Wether or not this mesh is stored on the heap and should be automatically cleaned up
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= false
+#endif
+	;
 
 	WAYLIB_C_OR_CPP_TYPE(WGPUBuffer, wgpu::Buffer) buffer; // Pointer to the data on the gpu
 	WAYLIB_C_OR_CPP_TYPE(WGPUBuffer, wgpu::Buffer) indexBuffer; // Pointer to the index data on the gpu
@@ -140,7 +167,11 @@ typedef struct model {
 	index_t bone_count;			// Number of bones
 	bone_info* bones;			// Bones information (skeleton)
 
-	bool heap_allocated;	// Wether or not this model is stored on the heap and should be automatically cleaned up
+	bool heap_allocated // Wether or not this model is stored on the heap and should be automatically cleaned up
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= false
+#endif
+	;
 
 #ifdef WAYLIB_ENABLE_CLASSES
 	inline mat4x4f& get_transform() { return *(mat4x4f*)&transform; }

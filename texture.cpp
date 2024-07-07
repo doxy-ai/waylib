@@ -27,7 +27,8 @@ namespace detail {
 
 		// if(hdr) image.format = channels == 4 ? image_format::RGBAF32 : image_format::RGBAF32;
 		// else image.format = channels == 4 ? image_format::RGBA8 : image_format::RGBA8;
-		image.mipmaps = 0;
+		image.mipmaps = 1;
+		image.frames = 1;
 		return image;
 	}
 
@@ -46,7 +47,8 @@ namespace detail {
 		}
 
 		// image.format = image_format::RGBAF32;
-		image.mipmaps = 0;
+		image.mipmaps = 1;
+		image.frames = 1;
 		return image;
 	}
 }

@@ -67,6 +67,84 @@ typedef struct create_shader_configuration {
 	;
 } create_shader_configuration;
 
+typedef struct material_configuration {
+	WAYLIB_OPTIONAL(WGPUCompareFunction) depth_function 
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= wgpu::CompareFunction::Less // Disables writing depth if not provided
+#endif
+	; // TODO: Add stencil support
+} material_configuration;
+
+typedef struct model_process_optimization_configuration {
+	; bool vertex_cache_locality
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= false
+#endif
+	; bool find_instances // Finds all duplicate meshes
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= false
+#endif
+	; bool meshes
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= false
+#endif
+	;
+} model_process_optimization_configuration;
+
+typedef struct model_process_configuration {
+	; bool triangulate // If not triangulated the import process will fail...
+		// but can be set to false to save time if model is already triangulated
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
+	; bool join_identical_vertecies
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
+	; bool generate_normals_if_not_present
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= false
+#endif
+	; bool smooth_generated_normals
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
+	; bool calculate_tangets_from_normals // Useful for normal mapping
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
+	; bool remove_normals
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= false
+#endif
+	; bool split_large_meshes
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
+	; bool split_large_bone_count
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= false
+#endif
+	; bool fix_infacing_normals
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= false
+#endif
+	; bool fix_invalid_data
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= false
+#endif
+	; bool fix_invalid_texture_paths
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
+
+	; bool validate_model
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= false
+#endif
+
+	; model_process_optimization_configuration optimize;
+} model_process_configuration;
 
 
 
@@ -249,6 +327,49 @@ void end_camera_mode(
 	wgpu_frame_state* frame
 );
 #endif // WAYLIB_NO_CAMERAS
+
+void mesh_upload(
+	wgpu_state state,
+	mesh* mesh
+);
+
+void material_upload(
+	wgpu_state state,
+	material* material,
+	material_configuration config
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
+);
+
+material create_material(
+	wgpu_state state,
+	shader* shaders,
+	size_t shader_count,
+	material_configuration config
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
+);
+
+model_process_configuration default_model_process_configuration();
+
+void model_upload(
+	wgpu_state state,
+	model* model
+);
+
+void model_draw_instanced(
+	wgpu_frame_state* frame,
+	model* model,
+	model_instance_data* instances,
+	size_t instance_count
+);
+
+void model_draw(
+	wgpu_frame_state* frame,
+	model* model
+);
 
 #ifdef __cplusplus
 } // End extern "C"
