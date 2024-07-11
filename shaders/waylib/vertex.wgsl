@@ -1,5 +1,7 @@
-R"(
-#pragma once
+R"(#pragma once
+
+// #include <waylib/instance>
+// #include <waylib/camera>
 
 struct waylib_input_vertex {
 	@location(0) position: vec3f,
@@ -12,6 +14,7 @@ struct waylib_input_vertex {
 
 struct waylib_output_vertex {
 	@builtin(position) position: vec4f,
+	@location(0) world_position: vec3f,
 	@location(1) texcoords: vec2f,
 	@location(2) normal: vec3f,
 	@location(3) color: vec4f,
@@ -28,8 +31,10 @@ fn waylib_default_vertex_shader(in: waylib_input_vertex, instance_index: u32) ->
 {
 	let transform = instances[instance_index].transform;
 	let tint = instances[instance_index].tint;
+	let world_position = transform * vec4f(in.position, 1);
 	return waylib_output_vertex(
-		transform * vec4f(in.position, 1),
+		camera.current_VP * world_position,
+		world_position.xyz,
 		in.texcoords,
 		in.normal,
 		tint * in.color,

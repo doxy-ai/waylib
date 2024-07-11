@@ -164,6 +164,13 @@ void window_begin_camera_mode2D(wgpu_frame_state* frame, window* window, camera2
 void window_begin_camera_mode2D(wgpu_frame_state& frame, window* window, camera2D& camera) {
 	begin_camera_mode2D(frame, camera, window_get_dimensions(window));
 }
+
+void window_begin_camera_mode_identity(wgpu_frame_state* frame, window* window) {
+	begin_camera_mode_identity(*frame, window_get_dimensions(window));
+}
+void window_begin_camera_mode_identity(wgpu_frame_state& frame, window* window) {
+	begin_camera_mode_identity(frame, window_get_dimensions(window));
+}
 #endif // WAYLIB_NO_CAMERAS
 
 #ifdef WAYLIB_NAMESPACE_NAME

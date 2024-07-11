@@ -1,5 +1,4 @@
-R"(
-#pragma once
+R"(#pragma once
 
 struct waylib_model_instance_data {
 	transform: mat4x4f,

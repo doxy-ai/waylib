@@ -9,6 +9,7 @@
 
 const char* shaderSource = R"(
 #include <waylib/time>
+#include <waylib/camera>
 #include <waylib/vertex>
 #include <waylib/instance>
 #include <waylib/wireframe>
@@ -21,7 +22,7 @@ struct vertex_output {
 @vertex
 fn vertex(vertex: waylib_input_vertex, @builtin(instance_index) inst_id: u32, @builtin(vertex_index) vert_id: u32) -> vertex_output {
 	let transform = instances[inst_id].transform;
-	return vertex_output(transform * vec4f(vertex.position, 1), calculate_barycentric_coordinates(vert_id));
+	return vertex_output(camera.current_VP * transform * vec4f(vertex.position, 1), calculate_barycentric_coordinates(vert_id));
 }
 
 @fragment
@@ -52,7 +53,7 @@ int main() {
 	});
 
 	// Load the shader module
-	wl::model model = wl::throw_if_null(wl::load_obj_model("../suzane.obj")); 
+	wl::model model = wl::throw_if_null(wl::load_obj_model("../suzane.obj", state)); 
 	model.material_count = 1;
 	wl::shader_preprocessor* p = wl::preprocessor_initialize_virtual_filesystem(wl::create_shader_preprocessor(), state);
 	wl::shader shader = wl::throw_if_null(wl::create_shader(
@@ -62,9 +63,8 @@ int main() {
 	wl::material mat = wl::create_material(state, shader);
 	model.materials = &mat;
 	model.mesh_materials = nullptr;
-	wl::model_upload(state, model);
 
-	wl::camera3D camera = {{0, 1, -1}, {0, 0, 0}};
+	wl::camera3D camera = {{0, 1, -1}, {}, {0, 0, 0}};
 
 	wl::time time = {};
 	while(!wl::window_should_close(window)) {

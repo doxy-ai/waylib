@@ -68,7 +68,7 @@ typedef struct create_shader_configuration {
 } create_shader_configuration;
 
 typedef struct material_configuration {
-	WAYLIB_OPTIONAL(WGPUCompareFunction) depth_function 
+	WAYLIB_OPTIONAL(WGPUCompareFunction) depth_function
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= wgpu::CompareFunction::Less // Disables writing depth if not provided
 #endif
@@ -149,9 +149,10 @@ typedef struct model_process_configuration {
 
 
 
+
 void time_calculations(time* time);
 void time_upload(
-	wgpu_frame_state* frame, 
+	wgpu_frame_state* frame,
 	time* time
 );
 
@@ -212,8 +213,8 @@ void release_shader_preprocessor(
 );
 
 shader_preprocessor* preprocessor_initialize_virtual_filesystem(
-	shader_preprocessor* processor, 
-	wgpu_state state, 
+	shader_preprocessor* processor,
+	wgpu_state state,
 	preprocess_shader_config config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
@@ -221,29 +222,29 @@ shader_preprocessor* preprocessor_initialize_virtual_filesystem(
 );
 
 shader_preprocessor* preprocessor_add_define(
-	shader_preprocessor* processor, 
-	const char* name, 
+	shader_preprocessor* processor,
+	const char* name,
 	const char* value
 );
 
 bool preprocessor_add_search_path(
-	shader_preprocessor* processor, 
+	shader_preprocessor* processor,
 	const char* _path
 );
 
 shader_preprocessor* preprocessor_initalize_platform_defines(
-	shader_preprocessor* processor, 
+	shader_preprocessor* processor,
 	wgpu_state state
 );
 
 const char* preprocessor_get_cached_file(
-	shader_preprocessor* processor, 
+	shader_preprocessor* processor,
 	const char* path
 );
 
 const char* preprocess_shader_from_memory(
-	shader_preprocessor* processor, 
-	const char* data, 
+	shader_preprocessor* processor,
+	const char* data,
 	preprocess_shader_config config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
@@ -251,9 +252,9 @@ const char* preprocess_shader_from_memory(
 );
 
 const char* preprocess_shader_from_memory_and_cache(
-	shader_preprocessor* processor, 
-	const char* data, 
-	const char* path, 
+	shader_preprocessor* processor,
+	const char* data,
+	const char* path,
 	preprocess_shader_config config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
@@ -261,8 +262,8 @@ const char* preprocess_shader_from_memory_and_cache(
 );
 
 const char* preprocess_shader(
-	shader_preprocessor* processor, 
-	const char* path, 
+	shader_preprocessor* processor,
+	const char* path,
 	preprocess_shader_config config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
@@ -302,24 +303,29 @@ void end_drawing(
 
 #ifndef WAYLIB_NO_CAMERAS
 WAYLIB_C_OR_CPP_TYPE(mat4x4f_, mat4x4f) camera3D_get_matrix(
-	camera3D* camera, 
+	camera3D* camera,
 	vec2i window_dimensions
 );
 
 WAYLIB_C_OR_CPP_TYPE(mat4x4f_, mat4x4f) camera2D_get_matrix(
-	camera2D* camera, 
+	camera2D* camera,
 	vec2i window_dimensions
 );
 
 void begin_camera_mode3D(
 	wgpu_frame_state* frame,
-	camera3D* camera, 
+	camera3D* camera,
 	vec2i window_dimensions
 );
 
 void begin_camera_mode2D(
 	wgpu_frame_state* frame,
-	camera2D* camera, 
+	camera2D* camera,
+	vec2i window_dimensions
+);
+
+void begin_camera_mode_identity(
+	wgpu_frame_state* frame,
 	vec2i window_dimensions
 );
 

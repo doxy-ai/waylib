@@ -1,5 +1,4 @@
-R"(
-#pragma once
+R"(#pragma once
 
 fn calculate_barycentric_coordinates(vertex_index: u32) -> vec3f {
 	const barycentric_coordinates = array<vec3f, 3>(vec3f(1, 0, 0), vec3f(0, 1, 0), vec3f(0, 0, 1));

@@ -55,9 +55,9 @@ WAYLIB_ENUM texture_slot {
 	C_PREPEND(TEXTURE_SLOT_, Normal),
 	C_PREPEND(TEXTURE_SLOT_, PackedMap),
 	C_PREPEND(TEXTURE_SLOT_, Roughness),
-	C_PREPEND(TEXTURE_SLOT_, Metalic),
+	C_PREPEND(TEXTURE_SLOT_, Metalness),
 	C_PREPEND(TEXTURE_SLOT_, AmbientOcclusion),
-	C_PREPEND(TEXTURE_SLOT_, Extra),
+	C_PREPEND(TEXTURE_SLOT_, Emission),
 	// Count of how many slots are supported
 	C_PREPEND(TEXTURE_SLOT_, Max),
 };
@@ -95,7 +95,7 @@ typedef struct shader {
 typedef struct material {
 	index_t shaderCount;
 	shader* shaders;
-	WAYLIB_OPTIONAL(texture) textures[WAYLIB_TEXTURE_SLOT_COUNT];
+	texture* textures[WAYLIB_TEXTURE_SLOT_COUNT];
 	WAYLIB_C_OR_CPP_TYPE(WGPURenderPipeline, wgpu::RenderPipeline) pipeline;
 	bool heap_allocated // Wether or not this material is stored on the heap and should be automatically cleaned up
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
@@ -105,7 +105,7 @@ typedef struct material {
 
 #ifdef WAYLIB_ENABLE_CLASSES
 	inline std::span<shader> get_shaders() { return {shaders, shaderCount}; }
-	inline std::span<WAYLIB_OPTIONAL(texture), WAYLIB_TEXTURE_SLOT_COUNT> get_textures() { return {textures}; }
+	inline std::span<texture*, WAYLIB_TEXTURE_SLOT_COUNT> get_textures() { return {textures}; }
 #endif
 } material;
 
@@ -201,34 +201,54 @@ typedef struct model_instance_data {
 	#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		#define WAYLIB_CAMERA_3D_MEMBERS\
 			vec3f position; /* Camera position */\
+			float padding1;\
 			vec3f target; /* Camera target it looks-at*/\
+			float padding2;\
 			vec3f up = {0, 1, 0}; /* Camera up vector (rotation over its axis)*/\
+			float padding3;\
 			float field_of_view = 90; /* Camera field-of-view aperture in Y (degrees) in perspective, used as near plane width in orthographic */\
 			float near_clip_distance = .01, far_clip_distance = 1000; /* Distances before objects are culled */\
-			bool orthographic = false; /* True if the camera should use orthographic projection */
+			uint32_t orthographic = false; /* True if the camera should use orthographic projection */
 
 		#define WAYLIB_CAMERA_2D_MEMBERS\
 			vec3f offset; /* Camera offset (displacement from target)*/\
+			float padding1;\
 			vec3f target; /* Camera target (rotation and zoom origin)*/\
+			float padding2;\
 			degree rotation = 0; /* Camera rotation in degrees*/\
 			float near_clip_distance = .01, far_clip_distance = 1000; /* Distances before objects are culled */\
 			float zoom = 1; /* Camera zoom (scaling), should be 1.0f by default*/
 	#else
 		#define WAYLIB_CAMERA_3D_MEMBERS\
 			vec3f position; /* Camera position */\
+			float padding1;\
 			vec3f target; /* Camera target it looks-at*/\
+			float padding2;\
 			vec3f up; /* Camera up vector (rotation over its axis)*/\
+			float padding3;\
 			float field_of_view; /* Camera field-of-view aperture in Y (degrees) in perspective, used as near plane width in orthographic */\
 			float near_clip_distance, far_clip_distance; /* Distances before objects are culled */\
-			bool orthographic; /* True if the camera should use orthographic projection */
+			uint32_t orthographic; /* True if the camera should use orthographic projection */
 
 		#define WAYLIB_CAMERA_2D_MEMBERS\
 			vec3f offset; /* Camera offset (displacement from target)*/\
+			float padding1;\
 			vec3f target; /* Camera target (rotation and zoom origin)*/\
+			float padding2;\
 			degree rotation; /* Camera rotation in degrees*/\
 			float near_clip_distance, far_clip_distance; /* Distances before objects are culled */\
 			float zoom; /* Camera zoom (scaling), should be 1.0f by default*/
 	#endif // WAYLIB_ENABLE_DEFAULT_PARAMETERS
+
+	#define WAYLIB_CAMERA_UPLOAD_DATA_MEMBERS\
+		uint32_t is_3D;\
+		camera3D settings3D;\
+		char padding1[8];\
+		camera2D settings2D;\
+		char padding2[4];\
+		vec2i window_dimensions;\
+		char padding3[8];\
+		mat4x4f_ current_VP;
 
 #ifndef __cplusplus
 	// Camera, defines position/orientation in 3d space
@@ -242,9 +262,14 @@ typedef struct model_instance_data {
 	typedef struct camera2D {
 		WAYLIB_CAMERA_2D_MEMBERS
 	} camera2D;
+
+	typedef struct camera_upload_data {
+		WAYLIB_CAMERA_UPLOAD_DATA_MEMBERS
+	} camera_upload_data;
 #else
 	struct camera3D;
 	struct camera2D;
+	struct camera_upload_data;
 #endif
 
 typedef camera3D camera;	// By default a camera is a 3D camera
@@ -256,6 +281,8 @@ typedef struct wgpu_state {
 	WAYLIB_C_OR_CPP_TYPE(WGPUSurface, wgpu::Surface) surface;
 } wgpu_state;
 
+struct wgpu_frame_finalizers;
+
 typedef struct wgpu_frame_state {
 	wgpu_state state;
 	WAYLIB_C_OR_CPP_TYPE(WGPUTextureView, wgpu::TextureView) color_target;
@@ -263,11 +290,7 @@ typedef struct wgpu_frame_state {
 	WAYLIB_C_OR_CPP_TYPE(WGPUTextureView, wgpu::TextureView) depth_target;
 	WAYLIB_C_OR_CPP_TYPE(WGPUCommandEncoder, wgpu::CommandEncoder) encoder;
 	WAYLIB_C_OR_CPP_TYPE(WGPURenderPassEncoder, wgpu::RenderPassEncoder) render_pass;
-	mat4x4f_ current_VP;
-
-#ifdef WAYLIB_ENABLE_CLASSES
-	inline mat4x4f& get_current_view_projection_matrix() { return *(mat4x4f*)&current_VP; }
-#endif
+	wgpu_frame_finalizers* finalizers;
 } wgpu_frame_state;
 
 typedef struct time {

@@ -16,7 +16,7 @@ pipeline_globals& create_pipeline_globals(wgpu_state state) {
 	if(global.created) return global;
 
 	// Create binding layout (don't forget to = Default)
-	std::array<wgpu::BindGroupLayoutEntry, 2> bindingLayouts = {wgpu::Default, wgpu::Default};
+	std::array<wgpu::BindGroupLayoutEntry, 3> bindingLayouts = {wgpu::Default, wgpu::Default, wgpu::Default};
 	// G0 B0 == Instance Data
 	bindingLayouts[0].binding = 0;
 	bindingLayouts[0].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
@@ -29,19 +29,30 @@ pipeline_globals& create_pipeline_globals(wgpu_state state) {
 	bindingLayouts[1].buffer.type = wgpu::BufferBindingType::Uniform;
 	bindingLayouts[1].buffer.minBindingSize = sizeof(time);
 	bindingLayouts[1].buffer.hasDynamicOffset = false;
+	// G2 B0 == Camera Data
+	bindingLayouts[2].binding = 0;
+	bindingLayouts[2].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
+	bindingLayouts[2].buffer.type = wgpu::BufferBindingType::Uniform;
+	bindingLayouts[2].buffer.minBindingSize = sizeof(camera_upload_data);
+	bindingLayouts[2].buffer.hasDynamicOffset = false;
 
 	// Create a bind group layout
 	wgpu::BindGroupLayoutDescriptor bindGroupLayoutDesc{};
+	// G0 == Instance Data
 	bindGroupLayoutDesc.label = "Waylib Instance Data Bind Group Layout";
 	bindGroupLayoutDesc.entryCount = 1;
 	bindGroupLayoutDesc.entries = &bindingLayouts[0];
-	// G0 == Instance Data
 	global.bindGroupLayouts[0] = state.device.createBindGroupLayout(bindGroupLayoutDesc);
+	// G1 == Time Data
 	bindGroupLayoutDesc.label = "Waylib Time Data Bind Group Layout";
 	bindGroupLayoutDesc.entryCount = 1;
 	bindGroupLayoutDesc.entries = &bindingLayouts[1];
-	// G1 == Time Data
 	global.bindGroupLayouts[1] = state.device.createBindGroupLayout(bindGroupLayoutDesc);
+	// G2 == Camera Data
+	bindGroupLayoutDesc.label = "Waylib Camera Data Bind Group Layout";
+	bindGroupLayoutDesc.entryCount = 1;
+	bindGroupLayoutDesc.entries = &bindingLayouts[2];
+	global.bindGroupLayouts[2] = state.device.createBindGroupLayout(bindGroupLayoutDesc);
 
 	wgpu::PipelineLayoutDescriptor layoutDesc;
 	layoutDesc.bindGroupLayoutCount = global.bindGroupLayouts.size();

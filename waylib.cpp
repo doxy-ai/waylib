@@ -39,31 +39,35 @@ void time_calculations(time& time) WAYLIB_TRY {
 void time_calculations(time* time) { time_calculations(*time); }
 
 void time_upload(wgpu_frame_state& frame, time& time) WAYLIB_TRY {
-	static wgpu::Buffer timeBuffer = [&frame] {
-		WGPUBufferDescriptor bufferDesc = {
-			.label = "Waylib Time Buffer",
-			.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform,
-			.size = sizeof(time),
-			.mappedAtCreation = false,
-		};
-		return frame.state.device.createBuffer(bufferDesc);
-	}();
-	static wgpu::BindGroup bindGroup = [&frame] {
-		std::array<WGPUBindGroupEntry, 1> bindings = {WGPUBindGroupEntry{
-			.binding = 0,
-			.buffer = timeBuffer,
-			.offset = 0,
-			.size = sizeof(time)
-		}};
+	static WGPUBufferDescriptor bufferDesc = {
+		.label = "Waylib Time Buffer",
+		.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform,
+		.size = sizeof(time),
+		.mappedAtCreation = false,
+	};
+
+	static std::array<WGPUBindGroupEntry, 1> bindings = {WGPUBindGroupEntry{
+		.binding = 0,
+		// .buffer = timeBuffer,
+		.offset = 0,
+		.size = sizeof(time)
+	}};
+	static wgpu::BindGroupDescriptor bindGroupDesc = [&frame] {
 		wgpu::BindGroupDescriptor bindGroupDesc = wgpu::Default;
 		bindGroupDesc.layout = create_pipeline_globals(frame.state).bindGroupLayouts[1]; // Group 1 is time data
 		bindGroupDesc.entryCount = bindings.size();
 		bindGroupDesc.entries = bindings.data();
-		return frame.state.device.createBindGroup(bindGroupDesc);
+		return bindGroupDesc;
 	}();
 
+	wgpu::Buffer timeBuffer = frame.state.device.createBuffer(bufferDesc);
 	frame.state.device.getQueue().writeBuffer(timeBuffer, 0, &time, sizeof(time));
+	WAYLIB_RELEASE_BUFFER_AT_FRAME_END(frame, timeBuffer);
+
+	bindings[0].buffer = timeBuffer;
+	wgpu::BindGroup bindGroup = frame.state.device.createBindGroup(bindGroupDesc);
 	frame.render_pass.setBindGroup(1, bindGroup, 0, nullptr);
+	WAYLIB_RELEASE_AT_FRAME_END(frame, bindGroup);
 } WAYLIB_CATCH()
 void time_upload(wgpu_frame_state* frame, time* time) {
 	time_upload(*frame, *time);
@@ -72,6 +76,10 @@ void time_upload(wgpu_frame_state* frame, time* time) {
 bool open_url(const char* url) WAYLIB_TRY {
 	return wl_detail::open_url(url);
 } WAYLIB_CATCH(false)
+
+//////////////////////////////////////////////////////////////////////
+// #WebGPU Defaults
+//////////////////////////////////////////////////////////////////////
 
 void process_wgpu_events([[maybe_unused]] Device device, [[maybe_unused]] bool yieldToWebBrowser = true) WAYLIB_TRY {
 #if defined(WEBGPU_BACKEND_DAWN)
@@ -84,10 +92,6 @@ void process_wgpu_events([[maybe_unused]] Device device, [[maybe_unused]] bool y
     }
 #endif
 } WAYLIB_CATCH()
-
-//////////////////////////////////////////////////////////////////////
-// #WebGPU Defaults
-//////////////////////////////////////////////////////////////////////
 
 template<typename T>
 wgpu::IndexFormat calculate_index_format() {
@@ -215,6 +219,9 @@ shader_preprocessor* preprocessor_initialize_virtual_filesystem(shader_preproces
 	preprocess_shader_from_memory_and_cache(processor,
 #include "shaders/waylib/wireframe.wgsl"
 		, "waylib/wireframe", config);
+	preprocess_shader_from_memory_and_cache(processor,
+#include "shaders/waylib/camera.wgsl"
+		, "waylib/camera", config);
 	return processor;
 } WAYLIB_CATCH(nullptr)
 
@@ -384,11 +391,11 @@ namespace detail{
 			.attributeCount = 1,
 			.attributes = &texcoord2Attribute,
 		};
-		static std::array<WGPUVertexBufferLayout, 6> buffers = {positionLayout, texcoordLayout, normalLayout, colorLayout, tangentLayout, texcoord2Layout};
+		static std::array<WGPUVertexBufferLayout, 6> bufferLayouts = {positionLayout, texcoordLayout, normalLayout, colorLayout, tangentLayout, texcoord2Layout};
 
 		if(shader.vertex_entry_point) {
-			pipelineDesc.vertex.bufferCount = buffers.size();
-			pipelineDesc.vertex.buffers = buffers.data();
+			pipelineDesc.vertex.bufferCount = bufferLayouts.size();
+			pipelineDesc.vertex.buffers = bufferLayouts.data();
 			pipelineDesc.vertex.constantCount = 0;
 			pipelineDesc.vertex.constants = nullptr;
 			pipelineDesc.vertex.entryPoint = shader.vertex_entry_point;
@@ -436,6 +443,7 @@ WAYLIB_OPTIONAL(wgpu_frame_state) begin_drawing_render_texture(wgpu_state state,
 
 	static wgpu::Texture depthTexture;
 	static wgpu::TextureView depthTextureView;
+	static wgpu_frame_finalizers finalizers;
 
 	// Create a command encoder for the draw call
 	wgpu::CommandEncoderDescriptor encoderDesc = {};
@@ -493,8 +501,7 @@ WAYLIB_OPTIONAL(wgpu_frame_state) begin_drawing_render_texture(wgpu_state state,
 	// Create the render pass and end it immediately (we only clear the screen but do not draw anything)
 	wgpu::RenderPassEncoder renderPass = encoder.beginRenderPass(renderPassDesc);
 
-	wgpu_frame_state out = {state, render_texture, depthTexture, depthTextureView, encoder, renderPass};
-	out.get_current_view_projection_matrix() = glm::identity<glm::mat4x4>();
+	wgpu_frame_state out = {state, render_texture, depthTexture, depthTextureView, encoder, renderPass, &finalizers};
 	return out;
 } WAYLIB_CATCH({})
 
@@ -539,8 +546,13 @@ void end_drawing(wgpu_frame_state& frame) WAYLIB_TRY {
 	frame.state.surface.present();
 #endif
 
+	// Call all of the finalizers
+	for(auto& finalizer: *frame.finalizers)
+		finalizer();
+	frame.finalizers->clear();
+
 	// Process callbacks
-	frame.state.device.tick();
+	process_wgpu_events(frame.state.device);
 } WAYLIB_CATCH()
 
 #ifndef WAYLIB_NO_CAMERAS
@@ -568,22 +580,83 @@ mat4x4f camera2D_get_matrix(camera2D& camera, vec2i window_dimensions) {
 }
 mat4x4f camera2D_get_matrix(camera2D* camera, vec2i window_dimensions) { return camera2D_get_matrix(*camera, window_dimensions); }
 
+void camera_data_upload(wgpu_frame_state& frame, camera_upload_data& data) {
+	static WGPUBufferDescriptor cameraBufferDesc = {
+		.label = "Waylib Camera Buffer",
+		.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform,
+		.size = sizeof(camera_upload_data),
+		.mappedAtCreation = false,
+	};
+	static std::array<WGPUBindGroupEntry, 1> bindings = {WGPUBindGroupEntry{
+		.binding = 0,
+		// .buffer = cameraBuffer,
+		.offset = 0,
+		.size = sizeof(camera_upload_data)
+	}};
+	static wgpu::BindGroupDescriptor bindGroupDesc = [&frame] {
+		wgpu::BindGroupDescriptor bindGroupDesc = wgpu::Default;
+		bindGroupDesc.layout = create_pipeline_globals(frame.state).bindGroupLayouts[2]; // Group 2 is camera data
+		bindGroupDesc.entryCount = bindings.size();
+		bindGroupDesc.entries = bindings.data();
+		return bindGroupDesc;
+	}();
+
+	wgpu::Buffer cameraBuffer = frame.state.device.createBuffer(cameraBufferDesc); WAYLIB_RELEASE_BUFFER_AT_FRAME_END(frame, cameraBuffer);
+	frame.state.device.getQueue().writeBuffer(cameraBuffer, 0, &data, sizeof(camera_upload_data));
+
+	bindings[0].buffer = cameraBuffer;
+	auto bindGroup = frame.state.device.createBindGroup(bindGroupDesc); WAYLIB_RELEASE_AT_FRAME_END(frame, bindGroup);
+	frame.render_pass.setBindGroup(2, bindGroup, 0, nullptr);
+}
+
 void begin_camera_mode3D(wgpu_frame_state& frame, camera3D& camera, vec2i window_dimensions) {
-	frame.get_current_view_projection_matrix() = camera3D_get_matrix(camera, window_dimensions);
+	camera_upload_data data {
+		.is_3D = true,
+		.settings3D = camera,
+		.window_dimensions = window_dimensions,
+	};
+	data.get_current_view_projection() = camera3D_get_matrix(camera, window_dimensions);
+	camera_data_upload(frame, data);
 }
 void begin_camera_mode3D(wgpu_frame_state* frame, camera3D* camera, vec2i window_dimensions) {
 	begin_camera_mode3D(*frame, *camera, window_dimensions);
 }
 
 void begin_camera_mode2D(wgpu_frame_state& frame, camera2D& camera, vec2i window_dimensions) {
-	frame.get_current_view_projection_matrix() = camera2D_get_matrix(camera, window_dimensions);
+	camera_upload_data data {
+		.is_3D = true,
+		.settings2D = camera,
+		.window_dimensions = window_dimensions,
+	};
+	data.get_current_view_projection() = camera2D_get_matrix(camera, window_dimensions);
+	camera_data_upload(frame, data);
 }
 void begin_camera_mode2D(wgpu_frame_state* frame, camera2D* camera, vec2i window_dimensions) {
 	begin_camera_mode2D(*frame, *camera, window_dimensions);
 }
 
+void begin_camera_mode_identity(wgpu_frame_state& frame, vec2i window_dimensions) {
+	camera_upload_data data {
+		.is_3D = false,
+		.settings3D = {},
+		.settings2D = {},
+		.window_dimensions = window_dimensions,
+	};
+	data.get_current_view_projection() = glm::identity<glm::mat4x4>();
+	camera_data_upload(frame, data);
+}
+void begin_camera_mode_identity(wgpu_frame_state* frame, vec2i window_dimensions) {
+	begin_camera_mode_identity(*frame, window_dimensions);
+}
+
 void end_camera_mode(wgpu_frame_state& frame) {
-	frame.get_current_view_projection_matrix() = glm::identity<glm::mat4x4>();
+	camera_upload_data data {
+		.is_3D = false,
+		.settings3D = {},
+		.settings2D = {},
+	};
+	data.get_current_view_projection() = glm::identity<glm::mat4x4>();
+	camera_data_upload(frame, data);
 }
 void end_camera_mode(wgpu_frame_state* frame) {
 	end_camera_mode(*frame);
@@ -756,21 +829,12 @@ void model_draw_instanced(wgpu_frame_state& frame, model& model, std::span<model
 		.size = sizeof(model_instance_data),
 		.mappedAtCreation = false,
 	};
-	static wgpu::Buffer instanceBuffer;
-	static wgpu::BindGroup bindGroup;
 
 	if(instances.size() > 0) {
-#ifndef WAYLIB_NO_CAMERAS
-		for(auto& data: instances)
-			data.get_transform() = frame.get_current_view_projection_matrix() * data.get_transform();
-#endif // WAYLIB_NO_CAMERAS
-
-		if(!instanceBuffer || instanceBuffer.getSize() < sizeof(model_instance_data) * instances.size()) {
-			if(instanceBuffer) instanceBuffer.release();
-			bufferDesc.size = sizeof(model_instance_data) * instances.size();
-			instanceBuffer = frame.state.device.createBuffer(bufferDesc);
-		}
+		bufferDesc.size = sizeof(model_instance_data) * instances.size();
+		wgpu::Buffer instanceBuffer = frame.state.device.createBuffer(bufferDesc);
 		frame.state.device.getQueue().writeBuffer(instanceBuffer, 0, instances.data(), sizeof(model_instance_data) * instances.size());
+		WAYLIB_RELEASE_BUFFER_AT_FRAME_END(frame, instanceBuffer);
 
 		std::array<WGPUBindGroupEntry, 1> bindings = {WGPUBindGroupEntry{
 			.binding = 0,
@@ -782,10 +846,10 @@ void model_draw_instanced(wgpu_frame_state& frame, model& model, std::span<model
 		bindGroupDesc.layout = create_pipeline_globals(frame.state).bindGroupLayouts[0]; // Group 0 is instance data
 		bindGroupDesc.entryCount = bindings.size();
 		bindGroupDesc.entries = bindings.data();
-		
-		if(bindGroup) bindGroup.release();
-		bindGroup = frame.state.device.createBindGroup(bindGroupDesc);
+
+		wgpu::BindGroup bindGroup = frame.state.device.createBindGroup(bindGroupDesc);
 		frame.render_pass.setBindGroup(0, bindGroup, 0, nullptr);
+		WAYLIB_RELEASE_AT_FRAME_END(frame, bindGroup);
 	}
 
 	for(size_t i = 0; i < model.mesh_count; ++i) {

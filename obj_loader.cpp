@@ -1,5 +1,8 @@
 #include "obj_loader.hpp"
-#include "common.h" // Here so it doesn't keep getting auto added
+
+#ifndef WAYLIB_NO_AUTOMATIC_UPLOAD
+#include "waylib.hpp"
+#endif
 
 #include <cassert>
 #include <filesystem>
@@ -17,7 +20,12 @@ namespace WAYLIB_NAMESPACE_NAME {
 // #Model
 //////////////////////////////////////////////////////////////////////
 
-WAYLIB_OPTIONAL(model) load_obj_model(const char* file_path) {
+#ifdef WAYLIB_NO_AUTOMATIC_UPLOAD
+WAYLIB_OPTIONAL(model) load_obj_model(const char* file_path)
+#else
+WAYLIB_OPTIONAL(model) load_obj_model(const char* file_path, WAYLIB_OPTIONAL(wgpu_state) state)
+#endif
+{
 	auto path = std::filesystem::absolute(file_path);
 	tinyobj::ObjReaderConfig reader_config;
 	reader_config.triangulate = true;
@@ -97,6 +105,14 @@ WAYLIB_OPTIONAL(model) load_obj_model(const char* file_path) {
 			index_offset += fv;
 		}
 	}
+
+	out.material_count = 0;
+	out.materials = nullptr;
+	out.mesh_materials = nullptr;
+#ifndef WAYLIB_NO_AUTOMATIC_UPLOAD
+	if(state.has_value)
+		model_upload(state.value, out);
+#endif
 	return out;
 }
 

@@ -1,5 +1,4 @@
-R"(
-#pragma once
+R"(#pragma once
 
 struct waylib_time_data {
 	since_start: f32,
