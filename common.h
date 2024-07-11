@@ -109,6 +109,12 @@ typedef struct material {
 #endif
 } material;
 
+// typedef struct pbr_material {
+// 	material base; // "Inherits" from material
+
+
+// } pbr_material;
+
 // Mesh, vertex data
 // From: raylib.h
 typedef struct mesh {
@@ -205,7 +211,6 @@ typedef struct model_instance_data {
 			vec3f target; /* Camera target it looks-at*/\
 			float padding2;\
 			vec3f up = {0, 1, 0}; /* Camera up vector (rotation over its axis)*/\
-			float padding3;\
 			float field_of_view = 90; /* Camera field-of-view aperture in Y (degrees) in perspective, used as near plane width in orthographic */\
 			float near_clip_distance = .01, far_clip_distance = 1000; /* Distances before objects are culled */\
 			uint32_t orthographic = false; /* True if the camera should use orthographic projection */
@@ -214,10 +219,10 @@ typedef struct model_instance_data {
 			vec3f offset; /* Camera offset (displacement from target)*/\
 			float padding1;\
 			vec3f target; /* Camera target (rotation and zoom origin)*/\
-			float padding2;\
 			degree rotation = 0; /* Camera rotation in degrees*/\
 			float near_clip_distance = .01, far_clip_distance = 1000; /* Distances before objects are culled */\
-			float zoom = 1; /* Camera zoom (scaling), should be 1.0f by default*/
+			float zoom = 1; /* Camera zoom (scaling), should be 1.0f by default*/\
+			uint32_t pixel_perfect = false; /*When false screen is in range [0, 1] when true screen is in range [0, #pixels]*/
 	#else
 		#define WAYLIB_CAMERA_3D_MEMBERS\
 			vec3f position; /* Camera position */\
@@ -225,29 +230,28 @@ typedef struct model_instance_data {
 			vec3f target; /* Camera target it looks-at*/\
 			float padding2;\
 			vec3f up; /* Camera up vector (rotation over its axis)*/\
-			float padding3;\
 			float field_of_view; /* Camera field-of-view aperture in Y (degrees) in perspective, used as near plane width in orthographic */\
 			float near_clip_distance, far_clip_distance; /* Distances before objects are culled */\
-			uint32_t orthographic; /* True if the camera should use orthographic projection */
+			uint32_t orthographic; /* True if the camera should use orthographic projection */\
 
 		#define WAYLIB_CAMERA_2D_MEMBERS\
 			vec3f offset; /* Camera offset (displacement from target)*/\
 			float padding1;\
 			vec3f target; /* Camera target (rotation and zoom origin)*/\
-			float padding2;\
 			degree rotation; /* Camera rotation in degrees*/\
 			float near_clip_distance, far_clip_distance; /* Distances before objects are culled */\
-			float zoom; /* Camera zoom (scaling), should be 1.0f by default*/
+			float zoom; /* Camera zoom (scaling), should be 1.0f by default*/\
+			uint32_t pixel_perfect; /*When false screen is in range [0, 1] when true screen is in range [0, #pixels]*/
 	#endif // WAYLIB_ENABLE_DEFAULT_PARAMETERS
 
 	#define WAYLIB_CAMERA_UPLOAD_DATA_MEMBERS\
 		uint32_t is_3D;\
+		char padding1[12];\
 		camera3D settings3D;\
-		char padding1[8];\
-		camera2D settings2D;\
 		char padding2[4];\
+		camera2D settings2D;\
 		vec2i window_dimensions;\
-		char padding3[8];\
+		char padding4[8];\
 		mat4x4f_ current_VP;
 
 #ifndef __cplusplus
@@ -274,6 +278,44 @@ typedef struct model_instance_data {
 
 typedef camera3D camera;	// By default a camera is a 3D camera
 #endif // WAYLIB_NO_CAMERAS
+
+#ifndef WAYLIB_NO_LIGHTS
+	WAYLIB_ENUM light_type {
+		C_PREPEND(LIGHT_TYPE_, Directional) = 0,
+		C_PREPEND(LIGHT_TYPE_, Point),
+		C_PREPEND(LIGHT_TYPE_, Spot),
+		// Count of how many slots are supported
+		C_PREPEND(LIGHT_TYPE_, Max),
+		C_PREPEND(LIGHT_TYPE_, FORCE32) = 0x7fffffff
+	};
+
+	#define WAYLIB_LIGHT_MEMBERS\
+		light_type type;\
+		vec3f padding1;\
+		vec3f position;\
+		float padding2;\
+		vec3f direction;\
+		float padding3;\
+	\
+		vec4f color;\
+		float intensity;\
+	\
+		float cutoff_start_angle;\
+		float cutoff_end_angle;\
+	\
+		float constant; /*There has to be a better way of storing attenuation...*/\
+		float linear;\
+		float quadratic;\
+		vec2f padding4;
+
+	#ifndef __cplusplus
+		typedef struct light {
+			WAYLIB_LIGHT_MEMBERS
+		} light;
+	#else
+		struct light;
+	#endif
+#endif // WAYLIB_NO_LIGHTS
 
 // Struct holding all of the state needed by webgpu functions
 typedef struct wgpu_state {

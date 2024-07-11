@@ -1,7 +1,7 @@
 R"(#pragma once
 
-// #include <waylib/instance>
-// #include <waylib/camera>
+#include <waylib/instance>
+#include <waylib/camera>
 
 struct waylib_input_vertex {
 	@location(0) position: vec3f,

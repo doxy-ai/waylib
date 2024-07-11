@@ -22,10 +22,12 @@ constexpr static WGPUTextureFormat depth_texture_format = wgpu::TextureFormat::D
 
 struct pipeline_globals {
 	bool created = false;
+	size_t min_buffer_size;
 	// Group 0 is Instance Data
 	// Group 1 is Time Data
 	// Group 2 is Camera Data
-	std::array<WGPUBindGroupLayout, 3> bindGroupLayouts;
+	// Group 3 is Light Data
+	std::array<WGPUBindGroupLayout, 4> bindGroupLayouts;
 	wgpu::PipelineLayout layout;
 };
 
@@ -50,6 +52,12 @@ struct pipeline_globals {
 	#endif
 	} camera_upload_data;
 #endif // WAYLIB_NO_CAMERAS
+
+#ifndef WAYLIB_NO_LIGHTS
+	struct light {
+		WAYLIB_LIGHT_MEMBERS
+	};
+#endif // WAYLIB_NO_LIGHTS
 
 // TODO: Is there an alternative to std::function we can use?
 struct wgpu_frame_finalizers: public std::vector<std::function<void()>> { using std::vector<std::function<void()>>::vector; };

@@ -79,6 +79,19 @@ void end_camera_mode(
 );
 #endif // WAYLIB_NO_CAMERAS
 
+#ifndef WAYLIB_NO_LIGHTS
+void light_upload(
+	wgpu_frame_state& frame,
+	std::span<light> lights
+);
+
+// void begin_light_mode(
+// 	wgpu_frame_state& frame,
+// 	light& light,
+// 	vec2i shadow_map_dimensions
+// );
+#endif // WAYLIB_NO_LIGHTS
+
 void mesh_upload(
 	wgpu_state state,
 	mesh& mesh

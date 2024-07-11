@@ -214,14 +214,17 @@ shader_preprocessor* preprocessor_initialize_virtual_filesystem(shader_preproces
 #include "shaders/waylib/instance.wgsl"
 		, "waylib/instance", config);
 	preprocess_shader_from_memory_and_cache(processor,
+#include "shaders/waylib/camera.wgsl"
+		, "waylib/camera", config);
+	preprocess_shader_from_memory_and_cache(processor,
+#include "shaders/waylib/light.wgsl"
+		, "waylib/light", config);
+	preprocess_shader_from_memory_and_cache(processor,
 #include "shaders/waylib/vertex.wgsl"
 		, "waylib/vertex", config);
 	preprocess_shader_from_memory_and_cache(processor,
 #include "shaders/waylib/wireframe.wgsl"
 		, "waylib/wireframe", config);
-	preprocess_shader_from_memory_and_cache(processor,
-#include "shaders/waylib/camera.wgsl"
-		, "waylib/camera", config);
 	return processor;
 } WAYLIB_CATCH(nullptr)
 
@@ -421,6 +424,44 @@ namespace detail{
 // #Begin/End Drawing
 //////////////////////////////////////////////////////////////////////
 
+void bind_zero_buffer_to_default_bindings(wgpu_frame_state& frame) {
+	static WGPUBufferDescriptor bufferDesc = {
+		.label = "Waylib Zero Buffer",
+		.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Storage | wgpu::BufferUsage::Uniform,
+		.size = create_pipeline_globals(frame.state).min_buffer_size,
+		.mappedAtCreation = false,
+	};
+	static wgpu::Buffer zeroBuffer = [&frame] {
+		std::vector<std::byte> zeroData(bufferDesc.size, std::byte{0});
+		auto zeroBuffer = frame.state.device.createBuffer(bufferDesc);
+		frame.state.device.getQueue().writeBuffer(zeroBuffer, 0, zeroData.data(), zeroData.size());
+		return zeroBuffer;
+	}();
+
+	static std::array<WGPUBindGroupEntry, 1> bindings = {WGPUBindGroupEntry{
+		.binding = 0,
+		.buffer = zeroBuffer,
+		.offset = 0,
+		.size = bufferDesc.size,
+	}};
+	static auto defaultBindGroups = [&frame] {
+		auto bindGroupDesc = [&frame](size_t group) {
+			wgpu::BindGroupDescriptor bindGroupDesc = wgpu::Default;
+			bindGroupDesc.layout = create_pipeline_globals(frame.state).bindGroupLayouts[group];
+			bindGroupDesc.entryCount = bindings.size();
+			bindGroupDesc.entries = bindings.data();
+			return bindGroupDesc;
+		};
+		std::array<wgpu::BindGroup, 4> defaultBindGroups;
+		for(size_t i = 0; i < defaultBindGroups.size(); ++i)
+			defaultBindGroups[i] = frame.state.device.createBindGroup(bindGroupDesc(i));
+		return defaultBindGroups;
+	}();
+
+	for(size_t i = 0; i < defaultBindGroups.size(); ++i)
+		frame.render_pass.setBindGroup(i, defaultBindGroups[i], 0, nullptr);
+}
+
 WAYLIB_OPTIONAL(wgpu_frame_state) begin_drawing_render_texture(wgpu_state state, WGPUTextureView render_texture, vec2i render_texture_dimensions, WAYLIB_OPTIONAL(color) clear_color /*= {}*/) WAYLIB_TRY {
 	static WGPUTextureViewDescriptor depthTextureViewDesc = {
 		.format = depth_texture_format,
@@ -502,6 +543,7 @@ WAYLIB_OPTIONAL(wgpu_frame_state) begin_drawing_render_texture(wgpu_state state,
 	wgpu::RenderPassEncoder renderPass = encoder.beginRenderPass(renderPassDesc);
 
 	wgpu_frame_state out = {state, render_texture, depthTexture, depthTextureView, encoder, renderPass, &finalizers};
+	bind_zero_buffer_to_default_bindings(out);
 	return out;
 } WAYLIB_CATCH({})
 
@@ -555,6 +597,10 @@ void end_drawing(wgpu_frame_state& frame) WAYLIB_TRY {
 	process_wgpu_events(frame.state.device);
 } WAYLIB_CATCH()
 
+//////////////////////////////////////////////////////////////////////
+// #Camera
+//////////////////////////////////////////////////////////////////////
+
 #ifndef WAYLIB_NO_CAMERAS
 mat4x4f camera3D_get_matrix(camera3D& camera, vec2i window_dimensions) {
 	mat4x4f V = glm::lookAt(camera.position, camera.target, camera.up);
@@ -570,11 +616,12 @@ mat4x4f camera3D_get_matrix(camera3D& camera, vec2i window_dimensions) {
 mat4x4f camera3D_get_matrix(camera3D* camera, vec2i window_dimensions) { return camera3D_get_matrix(*camera, window_dimensions); }
 
 mat4x4f camera2D_get_matrix(camera2D& camera, vec2i window_dimensions) {
-	window_dimensions /= std::abs(camera.zoom) < .01 ? 2 : 2 * camera.zoom;
-	vec3f position = {camera.target.x, camera.target.y, -.1};
+	window_dimensions /= std::abs(camera.zoom) < .01 ? 1 : 1 * camera.zoom;
+	vec3f position = {camera.target.x, camera.target.y, -1};
 	vec4f up = {0, 1, 0, 0};
 	up = glm::rotate(glm::identity<glm::mat4x4>(), camera.rotation.radian_value(), vec3f{0, 0, 1}) * up;
-	auto P = glm::ortho<float>(-window_dimensions.x, window_dimensions.x, -window_dimensions.y, window_dimensions.y, camera.near_clip_distance, camera.far_clip_distance);
+	auto P = glm::ortho<float>(0, window_dimensions.x, window_dimensions.y, 0, camera.near_clip_distance, camera.far_clip_distance);
+	if(!camera.pixel_perfect) P = glm::ortho<float>(0, 1/camera.zoom, 1/camera.zoom, 0, camera.near_clip_distance, camera.far_clip_distance);
 	auto V = glm::lookAt(position, position + vec3f{0, 0, 1}, up.xyz());
 	return P * V;
 }
@@ -662,6 +709,46 @@ void end_camera_mode(wgpu_frame_state* frame) {
 	end_camera_mode(*frame);
 }
 #endif // WAYLIB_NO_CAMERAS
+
+//////////////////////////////////////////////////////////////////////
+// #Light
+//////////////////////////////////////////////////////////////////////
+
+#ifndef WAYLIB_NO_LIGHTS
+void light_upload(wgpu_frame_state& frame, std::span<light> lights) {
+	static WGPUBufferDescriptor lightBufferDesc = {
+		.label = "Waylib Light Buffer",
+		.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Storage,
+		// .size = sizeof(light),
+		.mappedAtCreation = false,
+	};
+	static std::array<WGPUBindGroupEntry, 1> bindings = {WGPUBindGroupEntry{
+		.binding = 0,
+		// .buffer = cameraBuffer,
+		.offset = 0,
+		// .size = sizeof(light)
+	}};
+	static wgpu::BindGroupDescriptor bindGroupDesc = [&frame] {
+		wgpu::BindGroupDescriptor bindGroupDesc = wgpu::Default;
+		bindGroupDesc.layout = create_pipeline_globals(frame.state).bindGroupLayouts[3]; // Group 3 is light data
+		bindGroupDesc.entryCount = bindings.size();
+		bindGroupDesc.entries = bindings.data();
+		return bindGroupDesc;
+	}();
+
+	lightBufferDesc.size = sizeof(light) * lights.size();
+	wgpu::Buffer lightBuffer = frame.state.device.createBuffer(lightBufferDesc); WAYLIB_RELEASE_BUFFER_AT_FRAME_END(frame, lightBuffer);
+	frame.state.device.getQueue().writeBuffer(lightBuffer, 0, lights.data(), lightBufferDesc.size);
+
+	bindings[0].buffer = lightBuffer;
+	bindings[0].size = lightBufferDesc.size;
+	auto bindGroup = frame.state.device.createBindGroup(bindGroupDesc); WAYLIB_RELEASE_AT_FRAME_END(frame, bindGroup);
+	frame.render_pass.setBindGroup(3, bindGroup, 0, nullptr);
+}
+void light_upload(wgpu_frame_state* frame, light* lights, size_t lights_size) {
+	light_upload(*frame, {lights, lights_size});
+}
+#endif // WAYLIB_NO_LIGHTS
 
 //////////////////////////////////////////////////////////////////////
 // #Mesh

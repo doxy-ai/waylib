@@ -163,6 +163,10 @@ namespace detail {
 		preprocessor->defines += "#define WGPU_BACKEND_TYPE_OPENGL " + std::to_string(wgpu::BackendType::OpenGL) + "\n";
 		preprocessor->defines += "#define WGPU_BACKEND_TYPE_OPENGLES " + std::to_string(wgpu::BackendType::OpenGLES) + "\n";
 
+		preprocessor->defines += "#define WAYLIB_LIGHT_TYPE_DIRECTIONAL " "0" "\n";
+		preprocessor->defines += "#define WAYLIB_LIGHT_TYPE_POINT " "1" "\n";
+		preprocessor->defines += "#define WAYLIB_LIGHT_TYPE_SPOT " "2" "\n";
+
 		p.freeMembers();
 	}
 }

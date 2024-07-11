@@ -5,20 +5,38 @@
 #include "waylib.h" // Here so it won't keep getting auto added at the top!
 #include "window.h"
 
-#include <glm/geometric.hpp>
 #include <iostream>
 
 const char* shaderSource = R"(
 #include <waylib/time>
-#define WAYLIB_USE_DEFAULT_VERTEX_SHADER_AS_ENTRY_POINT
 #include <waylib/vertex>
-#include <waylib/light>
+#include <waylib/wireframe>
+
+struct vertex_output {
+	@builtin(position) position: vec4f,
+	@location(0) barycentric_coordinates: vec3f,
+};
+
+@vertex
+fn vertex(vertex: waylib_input_vertex, @builtin(instance_index) inst_id: u32, @builtin(vertex_index) vert_id: u32) -> vertex_output {
+	let transform = instances[inst_id].transform;
+	return vertex_output(camera.current_VP * transform * vec4f(vertex.position, 1), calculate_barycentric_coordinates(vert_id));
+}
 
 @fragment
-fn fragment(vert: waylib_output_vertex) -> @location(0) vec4f {
+fn fragment(vert: vertex_output) -> @location(0) vec4f {
+	// if(wireframe_factor(vert.barycentric_coordinates, 2) < .1) {
+	// 	discard;
+	// }
+	if(wireframe_factor(vert.barycentric_coordinates, 2) > .1) {
+		return vec4f(vec3f(0), 1);
+	}
 	let time = time.delta * 1400;
-	let light = lights[0];
-	return vec4f(light.color.rgb * time, 1);
+#if WGPU_BACKEND_TYPE == WGPU_BACKEND_TYPE_VULKAN
+	return vec4f(vec3f(0.0, 0.4, 1.0) * time, 1);
+#else
+	return vec4f(vec3f(0.4, 0, 1.0) * time, 1);
+#endif
 })";
 
 int main() {
@@ -26,36 +44,19 @@ int main() {
 	auto state = wl::create_default_device_from_window(window);
 	wl::window_automatically_reconfigure_surface_on_resize(window, state);
 
-	auto uncapturedErrorCallbackHandle = state.device.setUncapturedErrorCallback([](wgpu::ErrorType type, char const* message) {
-		std::cerr << "[WAYLIB] Uncaptured device error: type " << type;
-		if (message) std::cerr << " (" << message << ")";
-		std::cerr << std::endl;
-	});
-
 	// Load the shader module
-	wl::model model = wl::throw_if_null(wl::load_obj_model("../suzane.obj", state));
+	wl::model model = wl::throw_if_null(wl::load_obj_model("../suzane.obj", state)); 
 	model.material_count = 1;
 	wl::shader_preprocessor* p = wl::preprocessor_initialize_virtual_filesystem(wl::create_shader_preprocessor(), state);
 	wl::shader shader = wl::throw_if_null(wl::create_shader(
 		state, shaderSource,
-		{.vertex_entry_point = "waylib_default_vertex_shader", .fragment_entry_point = "fragment", .name = "Default Shader", .preprocessor = p}
+		{.vertex_entry_point = "vertex", .fragment_entry_point = "fragment", .name = "Wireframe Monkey Shader", .preprocessor = p}
 	));
 	wl::material mat = wl::create_material(state, shader);
 	model.materials = &mat;
 	model.mesh_materials = nullptr;
 
-	wl::camera3D camera = {.position={0, 1, -1}, .target={0, 0, 0}};
-	std::array<wl::light, 1> lights = {wl::light{
-		.type = wl::light_type::Directional,
-		.direction = glm::normalize(glm::vec3{-1, -1, 0}),
-		.color = {1, 1, 1, 1}, .intensity = 1
-	}};
-	// wl::camera3D camera = {{1, 2, 3}, 4, {5, 6, 7}, 8, {9, 10, 11}, 12, 13, 14, true};
-	// std::array<wl::light, 1> lights = {wl::light{
-	// 	(wl::light_type)1, 
-	// 	{2, 3, 4}, {5, 6, 7}, 
-	// 	8, {9, 10, 11}, 
-	// 	12, {13, 14, 15, 16}, 17, 18, 19, 20, 21, 22, {23, 24}}};	
+	wl::camera3D camera = {{0, 1, -1}, {}, {0, 0, 0}};
 
 	wl::time time = {};
 	while(!wl::window_should_close(window)) {
@@ -68,7 +69,6 @@ int main() {
 		);
 		{
 			wl::time_upload(frame, time);
-			wl::light_upload(frame, lights);
 			wl::window_begin_camera_mode3D(frame, window, camera);
 			{
 				wl::model_draw(frame, model);

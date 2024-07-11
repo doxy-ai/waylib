@@ -2,6 +2,7 @@
 #include "common.hpp"
 
 #include <string>
+#include <algorithm>
 
 #ifdef WAYLIB_NAMESPACE_NAME
 namespace WAYLIB_NAMESPACE_NAME {
@@ -16,7 +17,7 @@ pipeline_globals& create_pipeline_globals(wgpu_state state) {
 	if(global.created) return global;
 
 	// Create binding layout (don't forget to = Default)
-	std::array<wgpu::BindGroupLayoutEntry, 3> bindingLayouts = {wgpu::Default, wgpu::Default, wgpu::Default};
+	std::array<wgpu::BindGroupLayoutEntry, 4> bindingLayouts = {wgpu::Default, wgpu::Default, wgpu::Default, wgpu::Default};
 	// G0 B0 == Instance Data
 	bindingLayouts[0].binding = 0;
 	bindingLayouts[0].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
@@ -35,6 +36,12 @@ pipeline_globals& create_pipeline_globals(wgpu_state state) {
 	bindingLayouts[2].buffer.type = wgpu::BufferBindingType::Uniform;
 	bindingLayouts[2].buffer.minBindingSize = sizeof(camera_upload_data);
 	bindingLayouts[2].buffer.hasDynamicOffset = false;
+	// G3 B0 == Light Data
+	bindingLayouts[3].binding = 0;
+	bindingLayouts[3].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
+	bindingLayouts[3].buffer.type = wgpu::BufferBindingType::ReadOnlyStorage;
+	bindingLayouts[3].buffer.minBindingSize = sizeof(light);
+	bindingLayouts[3].buffer.hasDynamicOffset = false;
 
 	// Create a bind group layout
 	wgpu::BindGroupLayoutDescriptor bindGroupLayoutDesc{};
@@ -53,6 +60,11 @@ pipeline_globals& create_pipeline_globals(wgpu_state state) {
 	bindGroupLayoutDesc.entryCount = 1;
 	bindGroupLayoutDesc.entries = &bindingLayouts[2];
 	global.bindGroupLayouts[2] = state.device.createBindGroupLayout(bindGroupLayoutDesc);
+	// G3 == Light Data
+	bindGroupLayoutDesc.label = "Waylib Light Data Bind Group Layout";
+	bindGroupLayoutDesc.entryCount = 1;
+	bindGroupLayoutDesc.entries = &bindingLayouts[3];
+	global.bindGroupLayouts[3] = state.device.createBindGroupLayout(bindGroupLayoutDesc);
 
 	wgpu::PipelineLayoutDescriptor layoutDesc;
 	layoutDesc.bindGroupLayoutCount = global.bindGroupLayouts.size();
@@ -60,6 +72,12 @@ pipeline_globals& create_pipeline_globals(wgpu_state state) {
 	global.layout = state.device.createPipelineLayout(layoutDesc);
 
 	global.created = true;
+	global.min_buffer_size = std::max({
+		bindingLayouts[0].buffer.minBindingSize,
+		bindingLayouts[1].buffer.minBindingSize,
+		bindingLayouts[2].buffer.minBindingSize,
+		bindingLayouts[3].buffer.minBindingSize
+	});
 	return global;
 }
 

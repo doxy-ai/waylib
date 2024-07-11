@@ -17,6 +17,7 @@ struct camera2D {
 	near_clip_distance: f32,
     far_clip_distance: f32,
 	zoom: f32,
+	pixel_perfect: u32,
 };
 
 struct waylib_camera_data {
