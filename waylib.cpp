@@ -42,6 +42,28 @@ bool open_url(const char* url) WAYLIB_TRY {
 	return wl_detail::open_url(url);
 } WAYLIB_CATCH(false)
 
+wgpu::Buffer get_zero_buffer(wgpu_state state, size_t size) {
+	static WGPUBufferDescriptor bufferDesc = {
+		.label = "Waylib Zero Buffer",
+		.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Storage | wgpu::BufferUsage::Uniform,
+		.size = 10,
+		.mappedAtCreation = false,
+	};
+	static wgpu::Buffer zeroBuffer;
+	
+	if(!zeroBuffer || size > bufferDesc.size) {
+		bufferDesc.size = size;
+		std::vector<std::byte> zeroData(bufferDesc.size, std::byte{0});
+		if(zeroBuffer) {
+			zeroBuffer.destroy();
+			zeroBuffer.release();
+		}
+		zeroBuffer = state.device.createBuffer(bufferDesc);
+		state.device.getQueue().writeBuffer(zeroBuffer, 0, zeroData.data(), zeroData.size());
+	}
+	return zeroBuffer;
+};
+
 void upload_utility_data(wgpu_frame_state& frame, WAYLIB_OPTIONAL(camera_upload_data&) camera, std::span<light> lights, WAYLIB_OPTIONAL(time) time) {
 	static WGPUBufferDescriptor cameraBufferDesc = {
 		.label = "Waylib Camera Buffer",
@@ -61,18 +83,6 @@ void upload_utility_data(wgpu_frame_state& frame, WAYLIB_OPTIONAL(camera_upload_
 		.size = sizeof(time),
 		.mappedAtCreation = false,
 	};
-	static WGPUBufferDescriptor zeroBufferDesc = {
-		.label = "Waylib Utility Zero Buffer",
-		.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform | wgpu::BufferUsage::Storage,
-		.size = std::max({sizeof(time), sizeof(light), sizeof(camera_upload_data)}),
-		.mappedAtCreation = false,
-	};
-	static wgpu::Buffer zeroBuffer = [&frame]{
-		wgpu::Buffer zeroBuffer = frame.state.device.createBuffer(zeroBufferDesc);
-		std::vector<std::byte> data(zeroBufferDesc.size, std::byte{0});
-		frame.state.device.getQueue().writeBuffer(zeroBuffer, 0, data.data(), data.size());
-		return zeroBuffer;
-	}();
 
 	static std::array<WGPUBindGroupEntry, 3> bindings = {WGPUBindGroupEntry{
 		.binding = 0,
@@ -92,7 +102,7 @@ void upload_utility_data(wgpu_frame_state& frame, WAYLIB_OPTIONAL(camera_upload_
 	}};
 	static wgpu::BindGroupDescriptor bindGroupDesc = [&frame] {
 		wgpu::BindGroupDescriptor bindGroupDesc = wgpu::Default;
-		bindGroupDesc.layout = create_pipeline_globals(frame.state).bindGroupLayouts[2]; // Group 2 is utility data
+		bindGroupDesc.layout = create_pipeline_globals(frame.state).bindGroupLayouts[1]; // Group 1 is utility data
 		bindGroupDesc.entryCount = bindings.size();
 		bindGroupDesc.entries = bindings.data();
 		return bindGroupDesc;
@@ -102,7 +112,7 @@ void upload_utility_data(wgpu_frame_state& frame, WAYLIB_OPTIONAL(camera_upload_
 		wgpu::Buffer cameraBuffer = frame.state.device.createBuffer(cameraBufferDesc); WAYLIB_RELEASE_BUFFER_AT_FRAME_END(frame, cameraBuffer);
 		frame.state.device.getQueue().writeBuffer(cameraBuffer, 0, &camera.value, sizeof(camera_upload_data));
 		bindings[0].buffer = cameraBuffer;
-	} else bindings[0].buffer = zeroBuffer;
+	} else bindings[0].buffer = get_zero_buffer(frame.state, sizeof(camera_upload_data));
 
 	if(!lights.empty()) {
 		lightBufferDesc.size = sizeof(light) * lights.size();
@@ -111,18 +121,18 @@ void upload_utility_data(wgpu_frame_state& frame, WAYLIB_OPTIONAL(camera_upload_
 		bindings[1].buffer = lightBuffer;
 		bindings[1].size = lightBufferDesc.size;
 	} else {
-		bindings[1].buffer = zeroBuffer;
-		bindings[1].size = zeroBufferDesc.size;
+		bindings[1].buffer = get_zero_buffer(frame.state, sizeof(light));
+		bindings[1].size = sizeof(light);
 	}
 
 	if(time.has_value) {
 		wgpu::Buffer timeBuffer = frame.state.device.createBuffer(timeBufferDesc); WAYLIB_RELEASE_BUFFER_AT_FRAME_END(frame, timeBuffer);
 		frame.state.device.getQueue().writeBuffer(timeBuffer, 0, &time.value, sizeof(time));
 		bindings[2].buffer = timeBuffer;
-	} else bindings[2].buffer = zeroBuffer;
+	} else bindings[2].buffer = get_zero_buffer(frame.state, sizeof(time));
 
 	auto bindGroup = frame.state.device.createBindGroup(bindGroupDesc); WAYLIB_RELEASE_AT_FRAME_END(frame, bindGroup);
-	frame.render_pass.setBindGroup(2, bindGroup, 0, nullptr);
+	frame.render_pass.setBindGroup(1, bindGroup, 0, nullptr);
 }
 void upload_utility_data(wgpu_frame_state* frame, WAYLIB_OPTIONAL(camera_upload_data*) data, light* lights, size_t light_count, WAYLIB_OPTIONAL(time) time) {
 	WAYLIB_OPTIONAL(camera_upload_data&) camera = data.has_value ? *data.value : WAYLIB_OPTIONAL(camera_upload_data&){};
@@ -486,30 +496,23 @@ namespace detail{
 // #Begin/End Drawing
 //////////////////////////////////////////////////////////////////////
 
-void bind_textures(wgpu_frame_state& frame, std::span<WAYLIB_OPTIONAL(texture*), WAYLIB_TEXTURE_SLOT_COUNT> textures) {
+std::array<WGPUBindGroupEntry, 16> enumerate_texture_bindings(wgpu_frame_state& frame, std::span<WAYLIB_OPTIONAL(texture*), WAYLIB_TEXTURE_SLOT_COUNT> textures) {
 	static const texture& default_texture = *throw_if_null(get_default_texture(frame.state));
 	static std::array<WGPUBindGroupEntry, 16> bindings = [] {
 		std::array<WGPUBindGroupEntry, 16> bindings = {WGPUBindGroupEntry{
-			.binding = 0,
+			.binding = 1,
 			.textureView = default_texture.view,
 		}, WGPUBindGroupEntry{
-			.binding = 1,
+			.binding = 2,
 			.sampler = default_texture.sampler,
 		}};
 		for(size_t i = 2; i < bindings.size(); i += 2) {
 			bindings[i + 0] = bindings[0];
-			bindings[i + 0].binding = i + 0;
+			bindings[i + 0].binding = i + 1;
 			bindings[i + 1] = bindings[1];
-			bindings[i + 1].binding = i + 1;
+			bindings[i + 1].binding = i + 2;
 		}
 		return bindings;
-	}();
-	static wgpu::BindGroupDescriptor bindGroupDesc = [&frame] {
-		wgpu::BindGroupDescriptor bindGroupDesc = wgpu::Default;
-		bindGroupDesc.layout = create_pipeline_globals(frame.state).bindGroupLayouts[1]; // Group 1 is texture data
-		bindGroupDesc.entryCount = bindings.size();
-		bindGroupDesc.entries = bindings.data();
-		return bindGroupDesc;
 	}();
 
 	for(size_t i = 0; i < textures.size(); ++i)
@@ -522,51 +525,33 @@ void bind_textures(wgpu_frame_state& frame, std::span<WAYLIB_OPTIONAL(texture*),
 			bindings[2 * i + 1].sampler = default_texture.sampler;
 		}
 
-	auto textureBindGroup = frame.state.device.createBindGroup(bindGroupDesc); WAYLIB_RELEASE_AT_FRAME_END(frame, textureBindGroup);
-	frame.render_pass.setBindGroup(1, textureBindGroup, 0, nullptr);
+	return bindings;
 }
 
 void setup_default_bindings(wgpu_frame_state& frame) {
-	static WGPUBufferDescriptor bufferDesc = {
-		.label = "Waylib Zero Buffer",
-		.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Storage | wgpu::BufferUsage::Uniform,
-		.size = create_pipeline_globals(frame.state).min_buffer_size,
-		.mappedAtCreation = false,
-	};
-	static wgpu::Buffer zeroBuffer = [&frame] {
-		std::vector<std::byte> zeroData(bufferDesc.size, std::byte{0});
-		auto zeroBuffer = frame.state.device.createBuffer(bufferDesc);
-		frame.state.device.getQueue().writeBuffer(zeroBuffer, 0, zeroData.data(), zeroData.size());
-		return zeroBuffer;
+	static std::array<WGPUBindGroupEntry, 17> bindings = [&frame]{
+		size_t size = create_pipeline_globals(frame.state).min_buffer_size;
+		std::array<WGPUBindGroupEntry, 17> bindings{WGPUBindGroupEntry{
+			.binding = 0,
+			.buffer = get_zero_buffer(frame.state, size),
+			.offset = 0,
+			.size = size,
+		}};
+		auto null = std::array<WAYLIB_OPTIONAL(texture*), WAYLIB_TEXTURE_SLOT_COUNT>{};
+		std::array<WGPUBindGroupEntry, 16> textureBindings = enumerate_texture_bindings(frame, null);
+		std::copy(textureBindings.begin(), textureBindings.end(), bindings.begin() + 1);
+		return bindings;
+	}();
+	static wgpu::BindGroup defaultBindGroup = [&frame] {
+		wgpu::BindGroupDescriptor bindGroupDesc = wgpu::Default;
+		bindGroupDesc.layout = create_pipeline_globals(frame.state).bindGroupLayouts[0];
+		bindGroupDesc.entryCount = bindings.size();
+		bindGroupDesc.entries = bindings.data();
+		return frame.state.device.createBindGroup(bindGroupDesc);
 	}();
 
-	static std::array<WGPUBindGroupEntry, 1> bindings = {WGPUBindGroupEntry{
-		.binding = 0,
-		.buffer = zeroBuffer,
-		.offset = 0,
-		.size = bufferDesc.size,
-	}};
-	static auto defaultBindGroups = [&frame] {
-		auto bindGroupDesc = [&frame](size_t group) {
-			wgpu::BindGroupDescriptor bindGroupDesc = wgpu::Default;
-			bindGroupDesc.layout = create_pipeline_globals(frame.state).bindGroupLayouts[group];
-			bindGroupDesc.entryCount = bindings.size();
-			bindGroupDesc.entries = bindings.data();
-			return bindGroupDesc;
-		};
-		std::array<wgpu::BindGroup, 1> defaultBindGroups;
-		for(size_t i = 0; i < defaultBindGroups.size(); ++i)
-			defaultBindGroups[i] = frame.state.device.createBindGroup(bindGroupDesc(i));
-		return defaultBindGroups;
-	}();
-
-	for(size_t i = 0; i < defaultBindGroups.size(); ++i)
-		frame.render_pass.setBindGroup(i, defaultBindGroups[i], 0, nullptr);
-
-	
-	// Passing nothing to bind_textures, binds all of them to the default texture
-	auto null = std::array<WAYLIB_OPTIONAL(texture*), WAYLIB_TEXTURE_SLOT_COUNT>{};
-	bind_textures(frame, null);
+	// Bind instance and texture data
+	frame.render_pass.setBindGroup(0, defaultBindGroup, 0, nullptr);
 
 	// Passing nothing to upload_utility_data binds everything to zero!
 	upload_utility_data(frame, {}, {}, {});
@@ -960,6 +945,18 @@ void model_draw_instanced(wgpu_frame_state& frame, model& model, std::span<model
 		.size = sizeof(model_instance_data),
 		.mappedAtCreation = false,
 	};
+	static std::array<WGPUBindGroupEntry, 17> bindings = {WGPUBindGroupEntry{
+		.binding = 0,
+		.buffer = get_zero_buffer(frame.state, bufferDesc.size),
+		.offset = 0,
+		.size = sizeof(model_instance_data) * instances.size(),
+	}};
+	static WGPUBindGroupDescriptor bindGroupDesc {
+		.label = "Waylib Per Model Bind Group",
+		.layout = create_pipeline_globals(frame.state).bindGroupLayouts[0], // Group 0 is instance/texture data
+		.entryCount = bindings.size(),
+		.entries = bindings.data(),
+	};
 
 	if(instances.size() > 0) {
 		bufferDesc.size = sizeof(model_instance_data) * instances.size();
@@ -967,27 +964,24 @@ void model_draw_instanced(wgpu_frame_state& frame, model& model, std::span<model
 		frame.state.device.getQueue().writeBuffer(instanceBuffer, 0, instances.data(), sizeof(model_instance_data) * instances.size());
 		WAYLIB_RELEASE_BUFFER_AT_FRAME_END(frame, instanceBuffer);
 
-		std::array<WGPUBindGroupEntry, 1> bindings = {WGPUBindGroupEntry{
-			.binding = 0,
-			.buffer = instanceBuffer,
-			.offset = 0,
-			.size = sizeof(model_instance_data) * instances.size(),
-		}};
-		wgpu::BindGroupDescriptor bindGroupDesc = wgpu::Default;
-		bindGroupDesc.layout = create_pipeline_globals(frame.state).bindGroupLayouts[0]; // Group 0 is instance data
-		bindGroupDesc.entryCount = bindings.size();
-		bindGroupDesc.entries = bindings.data();
-
-		wgpu::BindGroup bindGroup = frame.state.device.createBindGroup(bindGroupDesc);
-		frame.render_pass.setBindGroup(0, bindGroup, 0, nullptr);
-		WAYLIB_RELEASE_AT_FRAME_END(frame, bindGroup);
+		bindings[0].buffer = instanceBuffer;
+		bindings[0].size = sizeof(model_instance_data) * instances.size();
+	} else {
+		bindings[0].buffer = get_zero_buffer(frame.state, sizeof(model_instance_data));
+		bindings[0].size = sizeof(model_instance_data);
 	}
 
 	for(size_t i = 0; i < model.mesh_count; ++i) {
 		// Select which render pipeline to use
 		auto& mat = model.materials[model.get_material_index_for_mesh(i)];
 		frame.render_pass.setPipeline(mat.pipeline);
-		bind_textures(frame, mat.get_textures());
+		// Figure out which textures to use from the material
+		auto tex = enumerate_texture_bindings(frame, mat.get_textures());
+		std::copy(tex.begin(), tex.end(), bindings.begin() + 1);
+
+		// Bind the instance and texture buffers
+		wgpu::BindGroup bindGroup = frame.state.device.createBindGroup(bindGroupDesc); WAYLIB_RELEASE_AT_FRAME_END(frame, bindGroup);
+		frame.render_pass.setBindGroup(0, bindGroup, 0, nullptr);
 
 		size_t currentOffset = 0;
 		auto& mesh = model.meshes[i];

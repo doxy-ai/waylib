@@ -27,5 +27,5 @@ struct waylib_camera_data {
     window_dimension: vec2i,
 	current_VP: mat4x4f,
 };
-@group(2) @binding(0) var<uniform> camera: waylib_camera_data;
+@group(1) @binding(0) var<uniform> camera: waylib_camera_data;
 )"

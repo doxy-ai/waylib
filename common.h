@@ -149,11 +149,11 @@ typedef struct material {
 #endif
 } material;
 
-// typedef struct pbr_material {
-// 	material base; // "Inherits" from material
+typedef struct pbr_material {
+	material base; // "Inherits" from material
 
 
-// } pbr_material;
+} pbr_material;
 
 // Mesh, vertex data
 // From: raylib.h

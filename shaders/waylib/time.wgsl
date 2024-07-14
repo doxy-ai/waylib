@@ -5,5 +5,5 @@ struct waylib_time_data {
 	delta: f32,
 	average_delta: f32,
 };
-@group(2) @binding(2) var<uniform> time: waylib_time_data;
+@group(1) @binding(2) var<uniform> time: waylib_time_data;
 )"

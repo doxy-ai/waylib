@@ -21,11 +21,7 @@ const char* shaderSource = R"(
 @fragment
 fn fragment(vert: waylib_output_vertex) -> @location(0) vec4f {
 	let time = time.delta * 1400;
-	let light = lights[0];
-
-	return vec4f(waylib_sample_color(vert.texcoords).rgb, 1);
-	// return vec4f(vec3(vert.texcoords * 2, 0) * time, 1);
-	// return vec4f(light.color.rgb * time, 1);
+	return vec4f(waylib_sample_color(vert.texcoords).rgb * time, 1);
 })";
 
 int main() {

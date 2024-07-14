@@ -17,123 +17,119 @@ pipeline_globals& create_pipeline_globals(wgpu_state state) {
 	if(global.created) return global;
 
 	// Create binding layout (don't forget to = Default)
-	std::array<wgpu::BindGroupLayoutEntry, 4> bufferBindingLayouts; bufferBindingLayouts.fill(wgpu::Default);
-	std::array<wgpu::BindGroupLayoutEntry, 16> textureBindingLayouts; textureBindingLayouts.fill(wgpu::Default);
-	// G0 B0 == Instance Data
-	bufferBindingLayouts[0].binding = 0;
-	bufferBindingLayouts[0].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
-	bufferBindingLayouts[0].buffer.type = wgpu::BufferBindingType::ReadOnlyStorage;
-	bufferBindingLayouts[0].buffer.minBindingSize = sizeof(model_instance_data);
-	bufferBindingLayouts[0].buffer.hasDynamicOffset = false;
-	// G2 B0 == Camera Data
-	bufferBindingLayouts[1].binding = 0;
-	bufferBindingLayouts[1].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
-	bufferBindingLayouts[1].buffer.type = wgpu::BufferBindingType::Uniform;
-	bufferBindingLayouts[1].buffer.minBindingSize = sizeof(camera_upload_data);
-	bufferBindingLayouts[1].buffer.hasDynamicOffset = false;
-	// G2 B1 == Light Data
-	bufferBindingLayouts[2].binding = 1;
-	bufferBindingLayouts[2].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
-	bufferBindingLayouts[2].buffer.type = wgpu::BufferBindingType::ReadOnlyStorage;
-	bufferBindingLayouts[2].buffer.minBindingSize = sizeof(light);
-	bufferBindingLayouts[2].buffer.hasDynamicOffset = false;
-	// G2 B2 == Time Data
-	bufferBindingLayouts[3].binding = 2;
-	bufferBindingLayouts[3].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
-	bufferBindingLayouts[3].buffer.type = wgpu::BufferBindingType::Uniform;
-	bufferBindingLayouts[3].buffer.minBindingSize = sizeof(time);
-	bufferBindingLayouts[3].buffer.hasDynamicOffset = false;
+	std::array<wgpu::BindGroupLayoutEntry, 17> modelTimeBindingLayouts; modelTimeBindingLayouts.fill(wgpu::Default);
+	std::array<wgpu::BindGroupLayoutEntry, 3> cameraTimeBindingLayouts; cameraTimeBindingLayouts.fill(wgpu::Default);
 
-	// G1 B0 == Color Texture Data
-	textureBindingLayouts[0].binding = 0;
-	textureBindingLayouts[0].visibility = wgpu::ShaderStage::Fragment;
-	textureBindingLayouts[0].texture.sampleType = wgpu::TextureSampleType::Float;
-	textureBindingLayouts[0].texture.viewDimension = wgpu::TextureViewDimension::_2D;
-	// G1 B1 == Color Sampler
-	textureBindingLayouts[1].binding = 1;
-	textureBindingLayouts[1].visibility = wgpu::ShaderStage::Fragment;
-	textureBindingLayouts[1].sampler.type = wgpu::SamplerBindingType::Filtering;
-	// G1 B2 == Height Texture Data
-	textureBindingLayouts[2].binding = 2;
-	textureBindingLayouts[2].visibility = wgpu::ShaderStage::Fragment;
-	textureBindingLayouts[2].texture.sampleType = wgpu::TextureSampleType::Float;
-	textureBindingLayouts[2].texture.viewDimension = wgpu::TextureViewDimension::_2D;
-	// G1 B3 == Height Sampler
-	textureBindingLayouts[3].binding = 3;
-	textureBindingLayouts[3].visibility = wgpu::ShaderStage::Fragment;
-	textureBindingLayouts[3].sampler.type = wgpu::SamplerBindingType::Filtering;
-	// G1 B4 == Normal Texture Data
-	textureBindingLayouts[4].binding = 4;
-	textureBindingLayouts[4].visibility = wgpu::ShaderStage::Fragment;
-	textureBindingLayouts[4].texture.sampleType = wgpu::TextureSampleType::Float;
-	textureBindingLayouts[4].texture.viewDimension = wgpu::TextureViewDimension::_2D;
-	// G1 B5 == Normal Sampler
-	textureBindingLayouts[5].binding = 5;
-	textureBindingLayouts[5].visibility = wgpu::ShaderStage::Fragment;
-	textureBindingLayouts[5].sampler.type = wgpu::SamplerBindingType::Filtering;
-	// G1 B6 == PackedMap Texture Data
-	textureBindingLayouts[6].binding = 6;
-	textureBindingLayouts[6].visibility = wgpu::ShaderStage::Fragment;
-	textureBindingLayouts[6].texture.sampleType = wgpu::TextureSampleType::Float;
-	textureBindingLayouts[6].texture.viewDimension = wgpu::TextureViewDimension::_2D;
-	// G1 B7 == Packed Sampler
-	textureBindingLayouts[7].binding = 7;
-	textureBindingLayouts[7].visibility = wgpu::ShaderStage::Fragment;
-	textureBindingLayouts[7].sampler.type = wgpu::SamplerBindingType::Filtering;
-	// G1 B8 == Roughness Texture Data
-	textureBindingLayouts[8].binding = 8;
-	textureBindingLayouts[8].visibility = wgpu::ShaderStage::Fragment;
-	textureBindingLayouts[8].texture.sampleType = wgpu::TextureSampleType::Float;
-	textureBindingLayouts[8].texture.viewDimension = wgpu::TextureViewDimension::_2D;
-	// G1 B9 == Roughness Sampler
-	textureBindingLayouts[9].binding = 9;
-	textureBindingLayouts[9].visibility = wgpu::ShaderStage::Fragment;
-	textureBindingLayouts[9].sampler.type = wgpu::SamplerBindingType::Filtering;
-	// G1 B10 == Metalness Texture Data
-	textureBindingLayouts[10].binding = 10;
-	textureBindingLayouts[10].visibility = wgpu::ShaderStage::Fragment;
-	textureBindingLayouts[10].texture.sampleType = wgpu::TextureSampleType::Float;
-	textureBindingLayouts[10].texture.viewDimension = wgpu::TextureViewDimension::_2D;
-	// G1 B11 == Metalness Sampler
-	textureBindingLayouts[11].binding = 11;
-	textureBindingLayouts[11].visibility = wgpu::ShaderStage::Fragment;
-	textureBindingLayouts[11].sampler.type = wgpu::SamplerBindingType::Filtering;
-	// G1 B12 == AmbientOcclusion Texture Data
-	textureBindingLayouts[12].binding = 12;
-	textureBindingLayouts[12].visibility = wgpu::ShaderStage::Fragment;
-	textureBindingLayouts[12].texture.sampleType = wgpu::TextureSampleType::Float;
-	textureBindingLayouts[12].texture.viewDimension = wgpu::TextureViewDimension::_2D;
-	// G1 B13 == AO Sampler
-	textureBindingLayouts[13].binding = 13;
-	textureBindingLayouts[13].visibility = wgpu::ShaderStage::Fragment;
-	textureBindingLayouts[13].sampler.type = wgpu::SamplerBindingType::Filtering;
-	// G1 B14 == Emission Texture Data
-	textureBindingLayouts[14].binding = 14;
-	textureBindingLayouts[14].visibility = wgpu::ShaderStage::Fragment;
-	textureBindingLayouts[14].texture.sampleType = wgpu::TextureSampleType::Float;
-	textureBindingLayouts[14].texture.viewDimension = wgpu::TextureViewDimension::_2D;
-	// G1 B15 == Emmission Sampler
-	textureBindingLayouts[15].binding = 15;
-	textureBindingLayouts[15].visibility = wgpu::ShaderStage::Fragment;
-	textureBindingLayouts[15].sampler.type = wgpu::SamplerBindingType::Filtering;
+	// G0 B0 == Instance Data
+	modelTimeBindingLayouts[0].binding = 0;
+	modelTimeBindingLayouts[0].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[0].buffer.type = wgpu::BufferBindingType::ReadOnlyStorage;
+	modelTimeBindingLayouts[0].buffer.minBindingSize = sizeof(model_instance_data);
+	modelTimeBindingLayouts[0].buffer.hasDynamicOffset = false;
+	// G0 B1 == Color Texture Data
+	modelTimeBindingLayouts[1].binding = 1;
+	modelTimeBindingLayouts[1].visibility = wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[1].texture.sampleType = wgpu::TextureSampleType::Float;
+	modelTimeBindingLayouts[1].texture.viewDimension = wgpu::TextureViewDimension::_2D;
+	// G0 B2 == Color Sampler
+	modelTimeBindingLayouts[2].binding = 2;
+	modelTimeBindingLayouts[2].visibility = wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[2].sampler.type = wgpu::SamplerBindingType::Filtering;
+	// G0 B3 == Height Texture Data
+	modelTimeBindingLayouts[3].binding = 3;
+	modelTimeBindingLayouts[3].visibility = wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[3].texture.sampleType = wgpu::TextureSampleType::Float;
+	modelTimeBindingLayouts[3].texture.viewDimension = wgpu::TextureViewDimension::_2D;
+	// G0 B4 == Height Sampler
+	modelTimeBindingLayouts[4].binding = 4;
+	modelTimeBindingLayouts[4].visibility = wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[4].sampler.type = wgpu::SamplerBindingType::Filtering;
+	// G0 B5 == Normal Texture Data
+	modelTimeBindingLayouts[5].binding = 5;
+	modelTimeBindingLayouts[5].visibility = wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[5].texture.sampleType = wgpu::TextureSampleType::Float;
+	modelTimeBindingLayouts[5].texture.viewDimension = wgpu::TextureViewDimension::_2D;
+	// G0 B6 == Normal Sampler
+	modelTimeBindingLayouts[6].binding = 6;
+	modelTimeBindingLayouts[6].visibility = wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[6].sampler.type = wgpu::SamplerBindingType::Filtering;
+	// G0 B7 == PackedMap Texture Data
+	modelTimeBindingLayouts[7].binding = 7;
+	modelTimeBindingLayouts[7].visibility = wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[7].texture.sampleType = wgpu::TextureSampleType::Float;
+	modelTimeBindingLayouts[7].texture.viewDimension = wgpu::TextureViewDimension::_2D;
+	// G0 B8 == Packed Sampler
+	modelTimeBindingLayouts[8].binding = 8;
+	modelTimeBindingLayouts[8].visibility = wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[8].sampler.type = wgpu::SamplerBindingType::Filtering;
+	// G0 B9 == Roughness Texture Data
+	modelTimeBindingLayouts[9].binding = 9;
+	modelTimeBindingLayouts[9].visibility = wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[9].texture.sampleType = wgpu::TextureSampleType::Float;
+	modelTimeBindingLayouts[9].texture.viewDimension = wgpu::TextureViewDimension::_2D;
+	// G0 B10 == Roughness Sampler
+	modelTimeBindingLayouts[10].binding = 10;
+	modelTimeBindingLayouts[10].visibility = wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[10].sampler.type = wgpu::SamplerBindingType::Filtering;
+	// G0 B11 == Metalness Texture Data
+	modelTimeBindingLayouts[11].binding = 11;
+	modelTimeBindingLayouts[11].visibility = wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[11].texture.sampleType = wgpu::TextureSampleType::Float;
+	modelTimeBindingLayouts[11].texture.viewDimension = wgpu::TextureViewDimension::_2D;
+	// G0 B12 == Metalness Sampler
+	modelTimeBindingLayouts[12].binding = 12;
+	modelTimeBindingLayouts[12].visibility = wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[12].sampler.type = wgpu::SamplerBindingType::Filtering;
+	// G0 B13 == AmbientOcclusion Texture Data
+	modelTimeBindingLayouts[13].binding = 13;
+	modelTimeBindingLayouts[13].visibility = wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[13].texture.sampleType = wgpu::TextureSampleType::Float;
+	modelTimeBindingLayouts[13].texture.viewDimension = wgpu::TextureViewDimension::_2D;
+	// G0 B14 == AO Sampler
+	modelTimeBindingLayouts[14].binding = 14;
+	modelTimeBindingLayouts[14].visibility = wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[14].sampler.type = wgpu::SamplerBindingType::Filtering;
+	// G0 B15 == Emission Texture Data
+	modelTimeBindingLayouts[15].binding = 15;
+	modelTimeBindingLayouts[15].visibility = wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[15].texture.sampleType = wgpu::TextureSampleType::Float;
+	modelTimeBindingLayouts[15].texture.viewDimension = wgpu::TextureViewDimension::_2D;
+	// G0 B16 == Emmission Sampler
+	modelTimeBindingLayouts[16].binding = 16;
+	modelTimeBindingLayouts[16].visibility = wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[16].sampler.type = wgpu::SamplerBindingType::Filtering;
+
+	// G1 B0 == Camera Data
+	cameraTimeBindingLayouts[0].binding = 0;
+	cameraTimeBindingLayouts[0].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
+	cameraTimeBindingLayouts[0].buffer.type = wgpu::BufferBindingType::Uniform;
+	cameraTimeBindingLayouts[0].buffer.minBindingSize = sizeof(camera_upload_data);
+	cameraTimeBindingLayouts[0].buffer.hasDynamicOffset = false;
+	// G1 B1 == Light Data
+	cameraTimeBindingLayouts[1].binding = 1;
+	cameraTimeBindingLayouts[1].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
+	cameraTimeBindingLayouts[1].buffer.type = wgpu::BufferBindingType::ReadOnlyStorage;
+	cameraTimeBindingLayouts[1].buffer.minBindingSize = sizeof(light);
+	cameraTimeBindingLayouts[1].buffer.hasDynamicOffset = false;
+	// G1 B2 == Time Data
+	cameraTimeBindingLayouts[2].binding = 2;
+	cameraTimeBindingLayouts[2].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
+	cameraTimeBindingLayouts[2].buffer.type = wgpu::BufferBindingType::Uniform;
+	cameraTimeBindingLayouts[2].buffer.minBindingSize = sizeof(time);
+	cameraTimeBindingLayouts[2].buffer.hasDynamicOffset = false;
 
 	// Create a bind group layout
 	wgpu::BindGroupLayoutDescriptor bindGroupLayoutDesc{};
-	// G0 == Instance Data
+	// G0 == Instance (B0)/Texture Data
 	bindGroupLayoutDesc.label = "Waylib Instance Data Bind Group Layout";
-	bindGroupLayoutDesc.entryCount = 1;
-	bindGroupLayoutDesc.entries = &bufferBindingLayouts[0];
+	bindGroupLayoutDesc.entryCount = modelTimeBindingLayouts.size();
+	bindGroupLayoutDesc.entries = modelTimeBindingLayouts.data();
 	global.bindGroupLayouts[0] = state.device.createBindGroupLayout(bindGroupLayoutDesc);
-	// G1 == Texture Data
-	bindGroupLayoutDesc.label = "Waylib Texture Bind Group Layout";
-	bindGroupLayoutDesc.entryCount = textureBindingLayouts.size();
-	bindGroupLayoutDesc.entries = textureBindingLayouts.data();
-	global.bindGroupLayouts[1] = state.device.createBindGroupLayout(bindGroupLayoutDesc);
-	// G2 == Utility Camera (B0) / Light (B1) / Time (B2) Data
+	// G1 == Utility Camera (B0) / Light (B1) / Time (B2) Data
 	bindGroupLayoutDesc.label = "Waylib Utility Data Bind Group Layout";
-	bindGroupLayoutDesc.entryCount = 3;
-	bindGroupLayoutDesc.entries = &bufferBindingLayouts[1];
-	global.bindGroupLayouts[2] = state.device.createBindGroupLayout(bindGroupLayoutDesc);
+	bindGroupLayoutDesc.entryCount = cameraTimeBindingLayouts.size();
+	bindGroupLayoutDesc.entries = cameraTimeBindingLayouts.data();
+	global.bindGroupLayouts[1] = state.device.createBindGroupLayout(bindGroupLayoutDesc);
 
 	wgpu::PipelineLayoutDescriptor layoutDesc;
 	layoutDesc.bindGroupLayoutCount = global.bindGroupLayouts.size();
@@ -142,10 +138,10 @@ pipeline_globals& create_pipeline_globals(wgpu_state state) {
 
 	global.created = true;
 	global.min_buffer_size = std::max({
-		bufferBindingLayouts[0].buffer.minBindingSize,
-		bufferBindingLayouts[1].buffer.minBindingSize,
-		bufferBindingLayouts[2].buffer.minBindingSize,
-		bufferBindingLayouts[3].buffer.minBindingSize
+		cameraTimeBindingLayouts[0].buffer.minBindingSize,
+		cameraTimeBindingLayouts[1].buffer.minBindingSize,
+		cameraTimeBindingLayouts[2].buffer.minBindingSize,
+		modelTimeBindingLayouts[0].buffer.minBindingSize
 	});
 	return global;
 }
