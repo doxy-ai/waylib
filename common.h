@@ -2,6 +2,37 @@
 #define WAYLIB_COMMON_IS_AVAILABLE
 #include "math.h"
 
+// Macro which defines an optional struct
+#ifdef __cplusplus
+	template<typename T>
+	struct optional {
+		bool has_value = false;
+		T value;
+
+		optional() requires(!std::is_reference_v<T>) : has_value(false) {}
+		optional() requires(std::is_reference_v<T>) : has_value(false), value([]() -> T {
+			static std::remove_reference_t<T> def = {};
+			return def;
+		}()) {}
+		optional(const T& value) : has_value(true), value(value) {}
+		optional(bool has_value, const T& value) : has_value(has_value), value(value) {}
+		optional(const optional&) = default;
+		optional(optional&&) = default;
+		optional& operator=(const optional&) = default;
+		optional& operator=(optional&&) = default;
+	};
+	#ifdef WAYLIB_NAMESPACE_NAME
+		#define WAYLIB_OPTIONAL(type) WAYLIB_NAMESPACE_NAME::optional<type>
+	#else
+		#define WAYLIB_OPTIONAL(type) optional<type>
+	#endif
+#else
+	#define WAYLIB_OPTIONAL(type) struct {\
+		bool has_value;\
+		type value;\
+	}
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -9,9 +40,14 @@ extern "C" {
 struct shader_preprocessor;
 struct camera_globals;
 
-typedef struct {
+typedef struct color {
 	float r, g, b, a;
 } color;
+
+typedef struct color8 {
+	unsigned char r, g, b, a;
+} color8;
+
 
 // typedef struct {
 // 	unsigned char r, g, b, a;
@@ -30,7 +66,11 @@ typedef struct {
 // Image, pixel data stored in CPU memory (RAM)
 // From: raylib.h
 typedef struct image {
-	color* data;            // Image raw data
+	bool float_data;
+	union {
+		color8* data;           // Image raw data
+		color* data32;
+	};
 	int width;              // Image base width
 	int height;             // Image base height
 	int mipmaps				// Mipmap levels, 1 by default
@@ -67,7 +107,7 @@ typedef struct texture {
 	image* cpu_data;
 	WAYLIB_C_OR_CPP_TYPE(WGPUTexture, wgpu::Texture) gpu_data;
 	WAYLIB_C_OR_CPP_TYPE(WGPUTextureView, wgpu::TextureView) view; // TODO: Needed?
-	WAYLIB_OPTIONAL(WAYLIB_C_OR_CPP_TYPE(WGPUSampler, wgpu::Sampler)) sampler;
+	WAYLIB_C_OR_CPP_TYPE(WGPUSampler, wgpu::Sampler) sampler;
 	bool heap_allocated // Wether or not this texture is stored on the heap and should be automatically cleaned up
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= false
@@ -95,7 +135,7 @@ typedef struct shader {
 typedef struct material {
 	index_t shaderCount;
 	shader* shaders;
-	texture* textures[WAYLIB_TEXTURE_SLOT_COUNT];
+	WAYLIB_OPTIONAL(texture*) textures[WAYLIB_TEXTURE_SLOT_COUNT];
 	WAYLIB_C_OR_CPP_TYPE(WGPURenderPipeline, wgpu::RenderPipeline) pipeline;
 	bool heap_allocated // Wether or not this material is stored on the heap and should be automatically cleaned up
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
@@ -105,7 +145,7 @@ typedef struct material {
 
 #ifdef WAYLIB_ENABLE_CLASSES
 	inline std::span<shader> get_shaders() { return {shaders, shaderCount}; }
-	inline std::span<texture*, WAYLIB_TEXTURE_SLOT_COUNT> get_textures() { return {textures}; }
+	inline std::span<WAYLIB_OPTIONAL(texture*), WAYLIB_TEXTURE_SLOT_COUNT> get_textures() { return {textures}; }
 #endif
 } material;
 

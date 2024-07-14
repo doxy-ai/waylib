@@ -33,18 +33,42 @@ wgpu::Surface window_get_surface(
 void window_begin_camera_mode3D(
 	wgpu_frame_state& frame,
 	window* window,
-	camera3D& camera
+	camera3D& camera,
+	std::span<light> lights
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
+	, WAYLIB_OPTIONAL(time) time
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
 );
 
 void window_begin_camera_mode2D(
 	wgpu_frame_state& frame,
 	window* window,
-	camera2D& camera
+	camera2D& camera,
+	std::span<light> lights
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
+	, WAYLIB_OPTIONAL(time) time
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
 );
 
 void window_begin_camera_mode_identity(
 	wgpu_frame_state& frame,
-	window* window
+	window* window,
+	std::span<light> lights
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
+	, WAYLIB_OPTIONAL(time) time
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
 );
 #endif // WAYLIB_NO_CAMERAS
 

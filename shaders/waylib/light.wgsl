@@ -15,5 +15,5 @@ struct waylib_light_data {
 	linear: f32,
 	quadratic: f32,
 };
-@group(3) @binding(0) var<storage, read> lights: array<waylib_light_data>;
+@group(2) @binding(1) var<storage, read> lights: array<waylib_light_data>;
 )"

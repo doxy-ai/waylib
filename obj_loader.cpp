@@ -21,11 +21,12 @@ WAYLIB_OPTIONAL(image) merge_color_and_alpha(const image& color, const image& al
 		&& !(alpha.width == 1 && alpha.height == 1)) return {};
 	assert(color.frames == 1 && alpha.frames == 1);
 	image out = color;
-	out.data = new ::wl::color[out.width * out.height];
+	out.float_data = true;
+	out.data32 = new WAYLIB_NAMESPACE_NAME::color[out.width * out.height];
 	for(size_t x = 0; x < out.width; ++x)
 		for(size_t y = 0; y < out.height; ++y) {
-			out.data[y * out.height + x] = color.data[y * out.height + x];
-			out.data[y * out.height + x].a = alpha.data[y * out.height + x].r;
+			out.data32[y * out.height + x] = color.data32[y * out.height + x];
+			out.data32[y * out.height + x].a = alpha.data32[y * out.height + x].r;
 		}
 	return out;
 }

@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <type_traits>
 #include <span>
 
 #ifdef __cpp_exceptions
@@ -24,10 +25,9 @@ struct pipeline_globals {
 	bool created = false;
 	size_t min_buffer_size;
 	// Group 0 is Instance Data
-	// Group 1 is Time Data
-	// Group 2 is Camera Data
-	// Group 3 is Light Data
-	std::array<WGPUBindGroupLayout, 4> bindGroupLayouts;
+	// Group 1 is "PBR" Texture Data
+	// Group 2 is Utility: Camera (B0) / Light (B1) / Time (B2) Data
+	std::array<WGPUBindGroupLayout, 3> bindGroupLayouts;
 	wgpu::PipelineLayout layout;
 };
 
@@ -88,6 +88,9 @@ std::string get_error_message_and_clear();
 #endif
 void set_error_message(const std::string_view view);
 void set_error_message(const std::string& str);
+
+// Not recommended to be used directly!
+pipeline_globals& create_pipeline_globals(wgpu_state state);
 
 #ifdef WAYLIB_NAMESPACE_NAME
 }

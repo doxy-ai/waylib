@@ -38,44 +38,96 @@ void time_calculations(time& time) WAYLIB_TRY {
 } WAYLIB_CATCH()
 void time_calculations(time* time) { time_calculations(*time); }
 
-void time_upload(wgpu_frame_state& frame, time& time) WAYLIB_TRY {
-	static WGPUBufferDescriptor bufferDesc = {
+bool open_url(const char* url) WAYLIB_TRY {
+	return wl_detail::open_url(url);
+} WAYLIB_CATCH(false)
+
+void upload_utility_data(wgpu_frame_state& frame, WAYLIB_OPTIONAL(camera_upload_data&) camera, std::span<light> lights, WAYLIB_OPTIONAL(time) time) {
+	static WGPUBufferDescriptor cameraBufferDesc = {
+		.label = "Waylib Camera Buffer",
+		.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform,
+		.size = sizeof(camera_upload_data),
+		.mappedAtCreation = false,
+	};
+	static WGPUBufferDescriptor lightBufferDesc = {
+		.label = "Waylib Light Buffer",
+		.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Storage,
+		// .size = sizeof(light),
+		.mappedAtCreation = false,
+	};
+	static WGPUBufferDescriptor timeBufferDesc = {
 		.label = "Waylib Time Buffer",
 		.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform,
 		.size = sizeof(time),
 		.mappedAtCreation = false,
 	};
+	static WGPUBufferDescriptor zeroBufferDesc = {
+		.label = "Waylib Utility Zero Buffer",
+		.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform | wgpu::BufferUsage::Storage,
+		.size = std::max({sizeof(time), sizeof(light), sizeof(camera_upload_data)}),
+		.mappedAtCreation = false,
+	};
+	static wgpu::Buffer zeroBuffer = [&frame]{
+		wgpu::Buffer zeroBuffer = frame.state.device.createBuffer(zeroBufferDesc);
+		std::vector<std::byte> data(zeroBufferDesc.size, std::byte{0});
+		frame.state.device.getQueue().writeBuffer(zeroBuffer, 0, data.data(), data.size());
+		return zeroBuffer;
+	}();
 
-	static std::array<WGPUBindGroupEntry, 1> bindings = {WGPUBindGroupEntry{
+	static std::array<WGPUBindGroupEntry, 3> bindings = {WGPUBindGroupEntry{
 		.binding = 0,
+		// .buffer = cameraBuffer,
+		.offset = 0,
+		.size = sizeof(camera_upload_data)
+	}, WGPUBindGroupEntry{
+		.binding = 1,
+		// .buffer = lightBuffer,
+		.offset = 0,
+		// .size = sizeof(light)
+	}, WGPUBindGroupEntry{
+		.binding = 2,
 		// .buffer = timeBuffer,
 		.offset = 0,
 		.size = sizeof(time)
 	}};
 	static wgpu::BindGroupDescriptor bindGroupDesc = [&frame] {
 		wgpu::BindGroupDescriptor bindGroupDesc = wgpu::Default;
-		bindGroupDesc.layout = create_pipeline_globals(frame.state).bindGroupLayouts[1]; // Group 1 is time data
+		bindGroupDesc.layout = create_pipeline_globals(frame.state).bindGroupLayouts[2]; // Group 2 is utility data
 		bindGroupDesc.entryCount = bindings.size();
 		bindGroupDesc.entries = bindings.data();
 		return bindGroupDesc;
 	}();
 
-	wgpu::Buffer timeBuffer = frame.state.device.createBuffer(bufferDesc);
-	frame.state.device.getQueue().writeBuffer(timeBuffer, 0, &time, sizeof(time));
-	WAYLIB_RELEASE_BUFFER_AT_FRAME_END(frame, timeBuffer);
+	if(camera.has_value) {
+		wgpu::Buffer cameraBuffer = frame.state.device.createBuffer(cameraBufferDesc); WAYLIB_RELEASE_BUFFER_AT_FRAME_END(frame, cameraBuffer);
+		frame.state.device.getQueue().writeBuffer(cameraBuffer, 0, &camera.value, sizeof(camera_upload_data));
+		bindings[0].buffer = cameraBuffer;
+	} else bindings[0].buffer = zeroBuffer;
 
-	bindings[0].buffer = timeBuffer;
-	wgpu::BindGroup bindGroup = frame.state.device.createBindGroup(bindGroupDesc);
-	frame.render_pass.setBindGroup(1, bindGroup, 0, nullptr);
-	WAYLIB_RELEASE_AT_FRAME_END(frame, bindGroup);
-} WAYLIB_CATCH()
-void time_upload(wgpu_frame_state* frame, time* time) {
-	time_upload(*frame, *time);
+	if(!lights.empty()) {
+		lightBufferDesc.size = sizeof(light) * lights.size();
+		wgpu::Buffer lightBuffer = frame.state.device.createBuffer(lightBufferDesc); WAYLIB_RELEASE_BUFFER_AT_FRAME_END(frame, lightBuffer);
+		frame.state.device.getQueue().writeBuffer(lightBuffer, 0, lights.data(), lightBufferDesc.size);
+		bindings[1].buffer = lightBuffer;
+		bindings[1].size = lightBufferDesc.size;
+	} else {
+		bindings[1].buffer = zeroBuffer;
+		bindings[1].size = zeroBufferDesc.size;
+	}
+
+	if(time.has_value) {
+		wgpu::Buffer timeBuffer = frame.state.device.createBuffer(timeBufferDesc); WAYLIB_RELEASE_BUFFER_AT_FRAME_END(frame, timeBuffer);
+		frame.state.device.getQueue().writeBuffer(timeBuffer, 0, &time.value, sizeof(time));
+		bindings[2].buffer = timeBuffer;
+	} else bindings[2].buffer = zeroBuffer;
+
+	auto bindGroup = frame.state.device.createBindGroup(bindGroupDesc); WAYLIB_RELEASE_AT_FRAME_END(frame, bindGroup);
+	frame.render_pass.setBindGroup(2, bindGroup, 0, nullptr);
 }
-
-bool open_url(const char* url) WAYLIB_TRY {
-	return wl_detail::open_url(url);
-} WAYLIB_CATCH(false)
+void upload_utility_data(wgpu_frame_state* frame, WAYLIB_OPTIONAL(camera_upload_data*) data, light* lights, size_t light_count, WAYLIB_OPTIONAL(time) time) {
+	WAYLIB_OPTIONAL(camera_upload_data&) camera = data.has_value ? *data.value : WAYLIB_OPTIONAL(camera_upload_data&){};
+	upload_utility_data(*frame, camera, {lights, light_count}, time);
+}
 
 //////////////////////////////////////////////////////////////////////
 // #WebGPU Defaults
@@ -116,16 +168,23 @@ wgpu::Device create_default_device_from_instance(WGPUInstance instance, WGPUSurf
 	// std::cout << "Got adapter: " << adapter << std::endl;
 
 	// std::cout << "Requesting device..." << std::endl;
+	WGPUFeatureName float32filterable = WGPUFeatureName_Float32Filterable;
 	wgpu::DeviceDescriptor deviceDesc = {};
 	deviceDesc.label = "Waylib Device";
-	deviceDesc.requiredFeatureCount = 0;
+	deviceDesc.requiredFeatureCount = 1;
+	deviceDesc.requiredFeatures = &float32filterable;
 	deviceDesc.requiredLimits = nullptr;
 	deviceDesc.defaultQueue.nextInChain = nullptr;
 	deviceDesc.defaultQueue.label = "Waylib Queue";
-	deviceDesc.deviceLostCallback = [](WGPUDeviceLostReason reason, char const* message, void* /* pUserData */) {
-		std::cout << "Device lost: reason " << reason;
-		if (message) std::cout << " (" << message << ")";
-		std::cout << std::endl;
+	deviceDesc.deviceLostCallbackInfo.callback = [](WGPUDevice const* device, WGPUDeviceLostReason reason, char const* message, void* userdata) {
+		std::cerr << "[WAYLIB] Device " << wgpu::Device{*device} << " lost: reason " << wgpu::DeviceLostReason{reason};
+		if (message) std::cerr << " (" << message << ")";
+		std::cerr << std::endl;
+	};
+	deviceDesc.uncapturedErrorCallbackInfo.callback = [](WGPUErrorType type, char const* message, void* userdata) {
+		std::cerr << "[WAYLIB] Uncaptured device error: type " << wgpu::ErrorType{type};
+		if (message) std::cerr << " (" << message << ")";
+		std::cerr << std::endl;
 	};
 	return adapter.requestDevice(deviceDesc);
 } WAYLIB_CATCH(nullptr)
@@ -213,6 +272,9 @@ shader_preprocessor* preprocessor_initialize_virtual_filesystem(shader_preproces
 	preprocess_shader_from_memory_and_cache(processor,
 #include "shaders/waylib/instance.wgsl"
 		, "waylib/instance", config);
+	preprocess_shader_from_memory_and_cache(processor,
+#include "shaders/waylib/textures.wgsl"
+		, "waylib/textures", config);
 	preprocess_shader_from_memory_and_cache(processor,
 #include "shaders/waylib/camera.wgsl"
 		, "waylib/camera", config);
@@ -424,7 +486,47 @@ namespace detail{
 // #Begin/End Drawing
 //////////////////////////////////////////////////////////////////////
 
-void bind_zero_buffer_to_default_bindings(wgpu_frame_state& frame) {
+void bind_textures(wgpu_frame_state& frame, std::span<WAYLIB_OPTIONAL(texture*), WAYLIB_TEXTURE_SLOT_COUNT> textures) {
+	static const texture& default_texture = *throw_if_null(get_default_texture(frame.state));
+	static std::array<WGPUBindGroupEntry, 16> bindings = [] {
+		std::array<WGPUBindGroupEntry, 16> bindings = {WGPUBindGroupEntry{
+			.binding = 0,
+			.textureView = default_texture.view,
+		}, WGPUBindGroupEntry{
+			.binding = 1,
+			.sampler = default_texture.sampler,
+		}};
+		for(size_t i = 2; i < bindings.size(); i += 2) {
+			bindings[i + 0] = bindings[0];
+			bindings[i + 0].binding = i + 0;
+			bindings[i + 1] = bindings[1];
+			bindings[i + 1].binding = i + 1;
+		}
+		return bindings;
+	}();
+	static wgpu::BindGroupDescriptor bindGroupDesc = [&frame] {
+		wgpu::BindGroupDescriptor bindGroupDesc = wgpu::Default;
+		bindGroupDesc.layout = create_pipeline_globals(frame.state).bindGroupLayouts[1]; // Group 1 is texture data
+		bindGroupDesc.entryCount = bindings.size();
+		bindGroupDesc.entries = bindings.data();
+		return bindGroupDesc;
+	}();
+
+	for(size_t i = 0; i < textures.size(); ++i)
+		if(textures[i].has_value) {
+			auto& texture = *textures[i].value;
+			bindings[2 * i + 0].textureView = texture.view;
+			bindings[2 * i + 1].sampler = texture.sampler;
+		} else {
+			bindings[2 * i + 0].textureView = default_texture.view;
+			bindings[2 * i + 1].sampler = default_texture.sampler;
+		}
+
+	auto textureBindGroup = frame.state.device.createBindGroup(bindGroupDesc); WAYLIB_RELEASE_AT_FRAME_END(frame, textureBindGroup);
+	frame.render_pass.setBindGroup(1, textureBindGroup, 0, nullptr);
+}
+
+void setup_default_bindings(wgpu_frame_state& frame) {
 	static WGPUBufferDescriptor bufferDesc = {
 		.label = "Waylib Zero Buffer",
 		.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Storage | wgpu::BufferUsage::Uniform,
@@ -452,7 +554,7 @@ void bind_zero_buffer_to_default_bindings(wgpu_frame_state& frame) {
 			bindGroupDesc.entries = bindings.data();
 			return bindGroupDesc;
 		};
-		std::array<wgpu::BindGroup, 4> defaultBindGroups;
+		std::array<wgpu::BindGroup, 1> defaultBindGroups;
 		for(size_t i = 0; i < defaultBindGroups.size(); ++i)
 			defaultBindGroups[i] = frame.state.device.createBindGroup(bindGroupDesc(i));
 		return defaultBindGroups;
@@ -460,6 +562,17 @@ void bind_zero_buffer_to_default_bindings(wgpu_frame_state& frame) {
 
 	for(size_t i = 0; i < defaultBindGroups.size(); ++i)
 		frame.render_pass.setBindGroup(i, defaultBindGroups[i], 0, nullptr);
+
+	
+	// Passing nothing to bind_textures, binds all of them to the default texture
+	auto null = std::array<WAYLIB_OPTIONAL(texture*), WAYLIB_TEXTURE_SLOT_COUNT>{};
+	bind_textures(frame, null);
+
+	// Passing nothing to upload_utility_data binds everything to zero!
+	upload_utility_data(frame, {}, {}, {});
+	// // By default we pass a camera view that does nothing and zeros for the rest of utility
+	// vec2i dim = {frame.depth_texture.getWidth(), frame.depth_texture.getHeight()};
+	// begin_camera_mode_identity(frame, dim, {}, {});
 }
 
 WAYLIB_OPTIONAL(wgpu_frame_state) begin_drawing_render_texture(wgpu_state state, WGPUTextureView render_texture, vec2i render_texture_dimensions, WAYLIB_OPTIONAL(color) clear_color /*= {}*/) WAYLIB_TRY {
@@ -543,7 +656,7 @@ WAYLIB_OPTIONAL(wgpu_frame_state) begin_drawing_render_texture(wgpu_state state,
 	wgpu::RenderPassEncoder renderPass = encoder.beginRenderPass(renderPassDesc);
 
 	wgpu_frame_state out = {state, render_texture, depthTexture, depthTextureView, encoder, renderPass, &finalizers};
-	bind_zero_buffer_to_default_bindings(out);
+	setup_default_bindings(out);
 	return out;
 } WAYLIB_CATCH({})
 
@@ -627,62 +740,33 @@ mat4x4f camera2D_get_matrix(camera2D& camera, vec2i window_dimensions) {
 }
 mat4x4f camera2D_get_matrix(camera2D* camera, vec2i window_dimensions) { return camera2D_get_matrix(*camera, window_dimensions); }
 
-void camera_data_upload(wgpu_frame_state& frame, camera_upload_data& data) {
-	static WGPUBufferDescriptor cameraBufferDesc = {
-		.label = "Waylib Camera Buffer",
-		.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform,
-		.size = sizeof(camera_upload_data),
-		.mappedAtCreation = false,
-	};
-	static std::array<WGPUBindGroupEntry, 1> bindings = {WGPUBindGroupEntry{
-		.binding = 0,
-		// .buffer = cameraBuffer,
-		.offset = 0,
-		.size = sizeof(camera_upload_data)
-	}};
-	static wgpu::BindGroupDescriptor bindGroupDesc = [&frame] {
-		wgpu::BindGroupDescriptor bindGroupDesc = wgpu::Default;
-		bindGroupDesc.layout = create_pipeline_globals(frame.state).bindGroupLayouts[2]; // Group 2 is camera data
-		bindGroupDesc.entryCount = bindings.size();
-		bindGroupDesc.entries = bindings.data();
-		return bindGroupDesc;
-	}();
-
-	wgpu::Buffer cameraBuffer = frame.state.device.createBuffer(cameraBufferDesc); WAYLIB_RELEASE_BUFFER_AT_FRAME_END(frame, cameraBuffer);
-	frame.state.device.getQueue().writeBuffer(cameraBuffer, 0, &data, sizeof(camera_upload_data));
-
-	bindings[0].buffer = cameraBuffer;
-	auto bindGroup = frame.state.device.createBindGroup(bindGroupDesc); WAYLIB_RELEASE_AT_FRAME_END(frame, bindGroup);
-	frame.render_pass.setBindGroup(2, bindGroup, 0, nullptr);
-}
-
-void begin_camera_mode3D(wgpu_frame_state& frame, camera3D& camera, vec2i window_dimensions) {
+void begin_camera_mode3D(wgpu_frame_state& frame, camera3D& camera, vec2i window_dimensions, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(time) time /*={}*/) {
 	camera_upload_data data {
 		.is_3D = true,
 		.settings3D = camera,
 		.window_dimensions = window_dimensions,
 	};
 	data.get_current_view_projection() = camera3D_get_matrix(camera, window_dimensions);
-	camera_data_upload(frame, data);
+	upload_utility_data(frame, data, lights, time);
 }
-void begin_camera_mode3D(wgpu_frame_state* frame, camera3D* camera, vec2i window_dimensions) {
-	begin_camera_mode3D(*frame, *camera, window_dimensions);
+void begin_camera_mode3D(wgpu_frame_state* frame, camera3D* camera, vec2i window_dimensions, light* lights /*= nullptr*/, size_t light_count /*=0*/, WAYLIB_OPTIONAL(time) time /*={}*/) {
+	begin_camera_mode3D(*frame, *camera, window_dimensions, {lights, light_count}, time);
 }
 
-void begin_camera_mode2D(wgpu_frame_state& frame, camera2D& camera, vec2i window_dimensions) {
+void begin_camera_mode2D(wgpu_frame_state& frame, camera2D& camera, vec2i window_dimensions, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(time) time /*={}*/) {
 	camera_upload_data data {
 		.is_3D = true,
 		.settings2D = camera,
 		.window_dimensions = window_dimensions,
 	};
 	data.get_current_view_projection() = camera2D_get_matrix(camera, window_dimensions);
-	camera_data_upload(frame, data);
+	upload_utility_data(frame, data, lights, time);
 }
-void begin_camera_mode2D(wgpu_frame_state* frame, camera2D* camera, vec2i window_dimensions) {
-	begin_camera_mode2D(*frame, *camera, window_dimensions);
+void begin_camera_mode2D(wgpu_frame_state* frame, camera2D* camera, vec2i window_dimensions, light* lights /*= nullptr*/, size_t light_count /*=0*/, WAYLIB_OPTIONAL(time) time /*={}*/) {
+	begin_camera_mode2D(*frame, *camera, window_dimensions, {lights, light_count}, time);
 }
 
-void begin_camera_mode_identity(wgpu_frame_state& frame, vec2i window_dimensions) {
+void begin_camera_mode_identity(wgpu_frame_state& frame, vec2i window_dimensions, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(time) time /*={}*/) {
 	camera_upload_data data {
 		.is_3D = false,
 		.settings3D = {},
@@ -690,9 +774,9 @@ void begin_camera_mode_identity(wgpu_frame_state& frame, vec2i window_dimensions
 		.window_dimensions = window_dimensions,
 	};
 	data.get_current_view_projection() = glm::identity<glm::mat4x4>();
-	camera_data_upload(frame, data);
+	upload_utility_data(frame, data, lights, time);
 }
-void begin_camera_mode_identity(wgpu_frame_state* frame, vec2i window_dimensions) {
+void begin_camera_mode_identity(wgpu_frame_state* frame, vec2i window_dimensions, light* lights /*= nullptr*/, size_t light_count /*=0*/, WAYLIB_OPTIONAL(time) time /*={}*/) {
 	begin_camera_mode_identity(*frame, window_dimensions);
 }
 
@@ -703,52 +787,12 @@ void end_camera_mode(wgpu_frame_state& frame) {
 		.settings2D = {},
 	};
 	data.get_current_view_projection() = glm::identity<glm::mat4x4>();
-	camera_data_upload(frame, data);
+	upload_utility_data(frame, data, {}, {});
 }
 void end_camera_mode(wgpu_frame_state* frame) {
 	end_camera_mode(*frame);
 }
 #endif // WAYLIB_NO_CAMERAS
-
-//////////////////////////////////////////////////////////////////////
-// #Light
-//////////////////////////////////////////////////////////////////////
-
-#ifndef WAYLIB_NO_LIGHTS
-void light_upload(wgpu_frame_state& frame, std::span<light> lights) {
-	static WGPUBufferDescriptor lightBufferDesc = {
-		.label = "Waylib Light Buffer",
-		.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Storage,
-		// .size = sizeof(light),
-		.mappedAtCreation = false,
-	};
-	static std::array<WGPUBindGroupEntry, 1> bindings = {WGPUBindGroupEntry{
-		.binding = 0,
-		// .buffer = cameraBuffer,
-		.offset = 0,
-		// .size = sizeof(light)
-	}};
-	static wgpu::BindGroupDescriptor bindGroupDesc = [&frame] {
-		wgpu::BindGroupDescriptor bindGroupDesc = wgpu::Default;
-		bindGroupDesc.layout = create_pipeline_globals(frame.state).bindGroupLayouts[3]; // Group 3 is light data
-		bindGroupDesc.entryCount = bindings.size();
-		bindGroupDesc.entries = bindings.data();
-		return bindGroupDesc;
-	}();
-
-	lightBufferDesc.size = sizeof(light) * lights.size();
-	wgpu::Buffer lightBuffer = frame.state.device.createBuffer(lightBufferDesc); WAYLIB_RELEASE_BUFFER_AT_FRAME_END(frame, lightBuffer);
-	frame.state.device.getQueue().writeBuffer(lightBuffer, 0, lights.data(), lightBufferDesc.size);
-
-	bindings[0].buffer = lightBuffer;
-	bindings[0].size = lightBufferDesc.size;
-	auto bindGroup = frame.state.device.createBindGroup(bindGroupDesc); WAYLIB_RELEASE_AT_FRAME_END(frame, bindGroup);
-	frame.render_pass.setBindGroup(3, bindGroup, 0, nullptr);
-}
-void light_upload(wgpu_frame_state* frame, light* lights, size_t lights_size) {
-	light_upload(*frame, {lights, lights_size});
-}
-#endif // WAYLIB_NO_LIGHTS
 
 //////////////////////////////////////////////////////////////////////
 // #Mesh
@@ -941,7 +985,9 @@ void model_draw_instanced(wgpu_frame_state& frame, model& model, std::span<model
 
 	for(size_t i = 0; i < model.mesh_count; ++i) {
 		// Select which render pipeline to use
-		frame.render_pass.setPipeline(model.materials[model.get_material_index_for_mesh(i)].pipeline);
+		auto& mat = model.materials[model.get_material_index_for_mesh(i)];
+		frame.render_pass.setPipeline(mat.pipeline);
+		bind_textures(frame, mat.get_textures());
 
 		size_t currentOffset = 0;
 		auto& mesh = model.meshes[i];
@@ -988,6 +1034,111 @@ void model_draw(wgpu_frame_state& frame, model& model) {
 void model_draw(wgpu_frame_state* frame, model* model) {
 	model_draw(*frame, *model);
 }
+
+//////////////////////////////////////////////////////////////////////
+// #Texture
+//////////////////////////////////////////////////////////////////////
+
+WAYLIB_OPTIONAL(texture) create_texture(wgpu_state state, vec2i dimensions, texture_config config /*= {}*/) {
+	texture out{.cpu_data = nullptr, .heap_allocated = false};
+	// Create the color texture
+	wgpu::TextureDescriptor textureDesc = wgpu::Default;
+	textureDesc.dimension = wgpu::TextureDimension::_2D;
+	textureDesc.size = { static_cast<uint32_t>(dimensions.x), static_cast<uint32_t>(dimensions.y), static_cast<uint32_t>(config.frames) };
+	textureDesc.mipLevelCount = config.mipmaps;
+	textureDesc.sampleCount = 1;
+	textureDesc.format = config.float_data ? wgpu::TextureFormat::RGBA32Float : wgpu::TextureFormat::RGBA8Unorm;
+	textureDesc.usage = wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::TextureBinding;
+	textureDesc.viewFormatCount = 1;
+	textureDesc.viewFormats = &textureDesc.format;
+	out.gpu_data = state.device.createTexture(textureDesc);
+	// std::cout << "Texture: " << out.gpu_data << std::endl;
+
+	wgpu::TextureViewDescriptor textureViewDesc = wgpu::Default;
+	textureViewDesc.aspect = wgpu::TextureAspect::All;
+	textureViewDesc.baseArrayLayer = 0;
+	textureViewDesc.arrayLayerCount = config.frames;
+	textureViewDesc.baseMipLevel = 0;
+	textureViewDesc.mipLevelCount = config.mipmaps;
+	textureViewDesc.dimension = wgpu::TextureViewDimension::_2D;
+	textureViewDesc.format = textureDesc.format;
+	out.view = out.gpu_data.createView(textureViewDesc);
+	// std::cout << "Texture view: " << out.view << std::endl;
+
+	// Create a sampler
+	wgpu::SamplerDescriptor samplerDesc;
+	samplerDesc.addressModeU = config.address_mode;
+	samplerDesc.addressModeV = config.address_mode;
+	samplerDesc.addressModeW = config.address_mode;
+	samplerDesc.magFilter = config.color_filter;
+	samplerDesc.minFilter = config.color_filter;
+	samplerDesc.mipmapFilter = config.mipmap_filter;
+	samplerDesc.lodMinClamp = 0.0f;
+	samplerDesc.lodMaxClamp = 8.0f;
+	samplerDesc.compare = wgpu::CompareFunction::Undefined;
+	samplerDesc.maxAnisotropy = 1;
+	out.sampler = state.device.createSampler(samplerDesc);
+
+	return out;
+}
+
+WAYLIB_OPTIONAL(texture) create_texture_from_image(wgpu_state state, image& image, texture_config config /*= {}*/) {
+	config.float_data = image.float_data;
+	config.frames = image.frames;
+	config.mipmaps = image.mipmaps;
+	auto _out = create_texture(state, {image.width, image.height}, config);
+	if(!_out.has_value) return _out; auto out = _out.value;
+
+	// Upload texture data
+	// Arguments telling which part of the texture we upload to
+	// (together with the last argument of writeTexture)
+	wgpu::ImageCopyTexture destination;
+	destination.texture = out.gpu_data;
+	destination.mipLevel = 0;
+	destination.origin = { 0, 0, 0 }; // equivalent of the offset argument of Queue::writeBuffer
+	destination.aspect = wgpu::TextureAspect::All; // only relevant for depth/Stencil textures
+
+	// Arguments telling how the C++ side pixel memory is laid out
+	wgpu::TextureDataLayout source;
+	source.offset = 0;
+	source.bytesPerRow = (image.float_data ? sizeof(color) : sizeof(color8)) * image.width;
+	source.rowsPerImage = image.height;
+
+	wgpu::Extent3D size = {static_cast<uint32_t>(image.width), static_cast<uint32_t>(image.height), static_cast<uint32_t>(image.frames)};
+	state.device.getQueue().writeTexture(destination, image.data, image.width * image.height * (image.float_data ? sizeof(color) : sizeof(color8)), source, size);
+	return out;
+}
+WAYLIB_OPTIONAL(texture) create_texture_from_image(wgpu_state state, image* image, texture_config config /*= {}*/) {
+	return create_texture_from_image(state, *image, config);
+}
+
+image texture_not_found_image(size_t dimensions) {
+	image img;
+	img.float_data = false;
+	img.data = new color8[dimensions * dimensions];
+	for (size_t i = 0; i < dimensions; ++i) {
+		for (size_t j = 0; j < dimensions; ++j) {
+			color8 *p = &img.data[j * dimensions + i];
+			p->r = (float(i) / dimensions) * 255;
+			p->g = (float(j) / dimensions) * 255;
+			p->b = .5 * 255;
+			p->a = 1 * 255;
+		}
+	}
+
+	img.heap_allocated = true;
+	img.mipmaps = img.frames = 1;
+	img.height = img.width = dimensions;
+	return img;
+}
+
+WAYLIB_OPTIONAL(const texture*) get_default_texture(wgpu_state state) {
+	static image image = texture_not_found_image(16);
+	static WAYLIB_OPTIONAL(texture) texture = create_texture_from_image(state, image, {.color_filter = wgpu::FilterMode::Nearest});
+
+	if(texture.has_value) return &texture.value;
+	return {};
+} 
 
 #ifdef WAYLIB_NAMESPACE_NAME
 }

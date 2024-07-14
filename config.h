@@ -42,33 +42,6 @@
 // Macro used to convert one of the C handles to its C++ variant
 #define WAYLIB_C_TO_CPP_CONVERSION(type, name) (*(type*)&(name))
 
-// Macro which defines an optional struct
-#ifdef __cplusplus
-	template<typename T>
-	struct optional {
-		bool has_value = false;
-		T value;
-
-		optional() : has_value(false) {}
-		optional(const T& value) : has_value(true), value(value) {}
-		optional(bool has_value, const T& value) : has_value(has_value), value(value) {}
-		optional(const optional&) = default;
-		optional(optional&&) = default;
-		optional& operator=(const optional&) = default;
-		optional& operator=(optional&&) = default;
-	};
-	#ifdef WAYLIB_NAMESPACE_NAME
-		#define WAYLIB_OPTIONAL(type) WAYLIB_NAMESPACE_NAME::optional<type>
-	#else
-		#define WAYLIB_OPTIONAL(type) optional<type>
-	#endif
-#else
-	#define WAYLIB_OPTIONAL(type) struct {\
-		bool has_value;\
-		type value;\
-	}
-#endif
-
 // Define the type of indices... by default it is a u32 (2 byte integer)
 #ifndef WAYLIB_INDEX_TYPE
 	#define WAYLIB_INDEX_TYPE uint32_t

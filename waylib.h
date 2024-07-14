@@ -146,17 +146,51 @@ typedef struct model_process_configuration {
 	; model_process_optimization_configuration optimize;
 } model_process_configuration;
 
+struct texture_config {
+	WGPUFilterMode color_filter
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= wgpu::FilterMode::Linear
+#endif
+	; WGPUMipmapFilterMode mipmap_filter
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= wgpu::MipmapFilterMode::Linear
+#endif
+	; WGPUAddressMode address_mode
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= wgpu::AddressMode::Repeat
+#endif
+	 
+
+	// Note: The following settings are overwritten when creating from an image!
+	; bool float_data
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= false
+#endif
+	; size_t mipmaps
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= 1
+#endif
+	; size_t frames
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= 1
+#endif
+	;
+};
 
 
 
 
 void time_calculations(time* time);
-void time_upload(
-	wgpu_frame_state* frame,
-	time* time
-);
 
 bool open_url(const char* url);
+
+void upload_utility_data(
+	wgpu_frame_state* frame, 
+	WAYLIB_OPTIONAL(camera_upload_data*) data, 
+	light* lights, 
+	size_t light_count, 
+	WAYLIB_OPTIONAL(time) time
+);
 
 WAYLIB_C_OR_CPP_TYPE(WGPUDevice, wgpu::Device) create_default_device_from_instance(
 	WGPUInstance instance,
@@ -315,38 +349,60 @@ WAYLIB_C_OR_CPP_TYPE(mat4x4f_, mat4x4f) camera2D_get_matrix(
 void begin_camera_mode3D(
 	wgpu_frame_state* frame,
 	camera3D* camera,
-	vec2i window_dimensions
+	vec2i window_dimensions,
+	light* lights
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= nullptr
+#endif
+	, size_t light_count
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= 0
+#endif
+	, WAYLIB_OPTIONAL(time) time
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
 );
 
 void begin_camera_mode2D(
 	wgpu_frame_state* frame,
 	camera2D* camera,
-	vec2i window_dimensions
+	vec2i window_dimensions,
+	light* lights
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= nullptr
+#endif
+	, size_t light_count
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= 0
+#endif
+	, WAYLIB_OPTIONAL(time) time
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
 );
 
 void begin_camera_mode_identity(
 	wgpu_frame_state* frame,
-	vec2i window_dimensions
+	vec2i window_dimensions,
+	light* lights
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= nullptr
+#endif
+	, size_t light_count
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= 0
+#endif
+	, WAYLIB_OPTIONAL(time) time
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
 );
 
 void end_camera_mode(
 	wgpu_frame_state* frame
 );
 #endif // WAYLIB_NO_CAMERAS
-
-#ifndef WAYLIB_NO_LIGHTS
-void light_upload(
-	wgpu_frame_state* frame,
-	light* lights,
-	size_t lights_size
-);
-
-// void begin_light_mode(
-// 	wgpu_frame_state* frame,
-// 	light* light,
-// 	vec2i shadow_map_dimensions
-// );
-#endif // WAYLIB_NO_LIGHTS
 
 void mesh_upload(
 	wgpu_state state,
@@ -390,6 +446,26 @@ void model_draw(
 	wgpu_frame_state* frame,
 	model* model
 );
+
+WAYLIB_OPTIONAL(texture) create_texture(
+	wgpu_state state, 
+	vec2i dimensions, 
+	texture_config config
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
+);
+
+WAYLIB_OPTIONAL(texture) create_texture_from_image(
+	wgpu_state state, 
+	image* image, 
+	texture_config config
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
+);
+
+WAYLIB_OPTIONAL(const texture*) get_default_texture(wgpu_state state);
 
 #ifdef __cplusplus
 } // End extern "C"
