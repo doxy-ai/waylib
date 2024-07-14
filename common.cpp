@@ -107,7 +107,7 @@ pipeline_globals& create_pipeline_globals(wgpu_state state) {
 	textureBindingLayouts[13].binding = 13;
 	textureBindingLayouts[13].visibility = wgpu::ShaderStage::Fragment;
 	textureBindingLayouts[13].sampler.type = wgpu::SamplerBindingType::Filtering;
-	// G1 B14 == Emmision Texture Data
+	// G1 B14 == Emission Texture Data
 	textureBindingLayouts[14].binding = 14;
 	textureBindingLayouts[14].visibility = wgpu::ShaderStage::Fragment;
 	textureBindingLayouts[14].texture.sampleType = wgpu::TextureSampleType::Float;

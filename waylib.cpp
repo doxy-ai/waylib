@@ -147,14 +147,14 @@ void process_wgpu_events([[maybe_unused]] Device device, [[maybe_unused]] bool y
 
 template<typename T>
 wgpu::IndexFormat calculate_index_format() {
-	static_assert(sizeof(T) == 2 || sizeof(T) == 4, "Index types must either be u16 or u32 convertable.");
+	static_assert(sizeof(T) == 2 || sizeof(T) == 4, "Index types must either be u16 or u32 convertible.");
 
 	if constexpr(sizeof(T) == 2)
 		return wgpu::IndexFormat::Uint16;
 	else return wgpu::IndexFormat::Uint32;
 }
 
-wgpu::TextureFormat surface_prefered_format(wgpu_state state) {
+wgpu::TextureFormat surface_preferred_format(wgpu_state state) {
 	wgpu::SurfaceCapabilities capabilities;
 	state.surface.getCapabilities(state.device.getAdapter(), &capabilities); // TODO: Always returns error?
 	return capabilities.formats[0];
@@ -216,13 +216,13 @@ bool configure_surface(wgpu_state state, vec2i size, surface_configuration confi
 
 	bool found = false;
 	for(size_t i = 0; i < capabilities.presentModeCount; ++i)
-		if(capabilities.presentModes[i] == config.presentaion_mode) {
+		if(capabilities.presentModes[i] == config.presentation_mode) {
 			found = true;
 			break;
 		}
 	if(!found) {
 		set_error_message_raw("Desired present mode not available... Falling back to First in First out.");
-		config.presentaion_mode = wgpu::PresentMode::Fifo; // Fifo
+		config.presentation_mode = wgpu::PresentMode::Fifo; // Fifo
 	}
 
 	// Configuration of the textures created for the underlying swap chain
@@ -235,7 +235,7 @@ bool configure_surface(wgpu_state state, vec2i size, surface_configuration confi
 	descriptor.viewFormatCount = 0;
 	descriptor.viewFormats = nullptr;
 	descriptor.device = state.device;
-	descriptor.presentMode = config.presentaion_mode;
+	descriptor.presentMode = config.presentation_mode;
 	descriptor.alphaMode = config.alpha_mode;
 
 	state.surface.configure(descriptor);
@@ -251,7 +251,7 @@ namespace detail {
 	std::optional<std::string> preprocess_shader_from_memory(shader_preprocessor* processor, const std::string& _data, const preprocess_shader_config& config);
 	std::optional<std::string> preprocess_shader_from_memory_and_cache(shader_preprocessor* processor, const std::string& _data, const std::filesystem::path& path, preprocess_shader_config config);
 	std::optional<std::string> preprocess_shader(shader_preprocessor* processor, const std::filesystem::path& path, const preprocess_shader_config& config);
-	void preprocessor_initalize_platform_defines(shader_preprocessor* preprocessor, wgpu::Adapter adapter);
+	void preprocessor_initialize_platform_defines(shader_preprocessor* preprocessor, wgpu::Adapter adapter);
 }
 
 shader_preprocessor* create_shader_preprocessor() WAYLIB_TRY {
@@ -264,7 +264,7 @@ void release_shader_preprocessor(shader_preprocessor* processor) WAYLIB_TRY {
 
 shader_preprocessor* preprocessor_initialize_virtual_filesystem(shader_preprocessor* processor, wgpu_state state, preprocess_shader_config config /*= {}*/) WAYLIB_TRY {
 	if(processor->defines.find("WGPU_ADAPTER_TYPE") == std::string::npos)
-		preprocessor_initalize_platform_defines(processor, state);
+		preprocessor_initialize_platform_defines(processor, state);
 
 	preprocess_shader_from_memory_and_cache(processor,
 #include "shaders/waylib/time.wgsl"
@@ -303,8 +303,8 @@ bool preprocessor_add_search_path(shader_preprocessor* processor, const char* _p
 	return true;
 } WAYLIB_CATCH(false)
 
-shader_preprocessor* preprocessor_initalize_platform_defines(shader_preprocessor* processor, wgpu_state state) WAYLIB_TRY {
-	detail::preprocessor_initalize_platform_defines(processor, state.device.getAdapter());
+shader_preprocessor* preprocessor_initialize_platform_defines(shader_preprocessor* processor, wgpu_state state) WAYLIB_TRY {
+	detail::preprocessor_initialize_platform_defines(processor, state.device.getAdapter());
 	return processor;
 } WAYLIB_CATCH(nullptr)
 
@@ -380,7 +380,7 @@ namespace detail{
 		};
 		thread_local static WGPUColorTargetState colorTarget = {
 			.nextInChain = nullptr,
-			.format = surface_prefered_format(state),
+			.format = surface_preferred_format(state),
 			.blend = &blendState,
 			.writeMask = wgpu::ColorWriteMask::All,
 		};
@@ -872,7 +872,7 @@ void material_upload(wgpu_state state, material& material, material_configuratio
 	// Create the render pipeline
 	wgpu::RenderPipelineDescriptor pipelineDesc;
 	wgpu::FragmentState fragment;
-	for(size_t i = material.shaderCount; i--; ) { // Reverse itteration ensures that lower indexed shaders take precedence
+	for(size_t i = material.shaderCount; i--; ) { // Reverse iteration ensures that lower indexed shaders take precedence
 		WAYLIB_OPTIONAL(wgpu::FragmentState) fragmentOpt;
 		std::tie(pipelineDesc, fragmentOpt) = detail::shader_configure_render_pipeline_descriptor(state, material.shaders[i], pipelineDesc);
 		if(fragmentOpt.has_value) {
@@ -906,7 +906,7 @@ void material_upload(wgpu_state state, material& material, material_configuratio
 	depthStencilState.depthWriteEnabled = config.depth_function.has_value;
 	// Store the format in a variable as later parts of the code depend on it
 	depthStencilState.format = depth_texture_format;
-	// Deactivate the stencil alltogether
+	// Deactivate the stencil altogether
 	depthStencilState.stencilReadMask = 0;
 	depthStencilState.stencilWriteMask = 0;
 	pipelineDesc.depthStencil = &depthStencilState;

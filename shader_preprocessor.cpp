@@ -137,7 +137,7 @@ namespace detail {
 		return preprocess_shader_from_memory_and_cache(processor, *data, path, config);
 	}
 
-	void preprocessor_initalize_platform_defines(shader_preprocessor* preprocessor, wgpu::Adapter adapter) {
+	void preprocessor_initialize_platform_defines(shader_preprocessor* preprocessor, wgpu::Adapter adapter) {
 		constexpr static auto quote = [](const std::string& s) { return "\"" + s + "\""; };
 		wgpu::AdapterProperties p;
 		adapter.getProperties(&p);

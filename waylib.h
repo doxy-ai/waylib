@@ -7,7 +7,7 @@ extern "C" {
 #endif
 
 typedef struct surface_configuration {
-	WGPUPresentMode presentaion_mode
+	WGPUPresentMode presentation_mode
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= wgpu::PresentMode::Mailbox
 #endif
@@ -109,7 +109,7 @@ typedef struct model_process_configuration {
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= true
 #endif
-	; bool calculate_tangets_from_normals // Useful for normal mapping
+	; bool calculate_tangents_from_normals // Useful for normal mapping
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= true
 #endif
@@ -266,7 +266,7 @@ bool preprocessor_add_search_path(
 	const char* _path
 );
 
-shader_preprocessor* preprocessor_initalize_platform_defines(
+shader_preprocessor* preprocessor_initialize_platform_defines(
 	shader_preprocessor* processor,
 	wgpu_state state
 );
