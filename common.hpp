@@ -47,7 +47,8 @@ struct pipeline_globals {
 		WAYLIB_CAMERA_UPLOAD_DATA_MEMBERS
 
 	#ifdef WAYLIB_ENABLE_CLASSES
-		mat4x4f& get_current_view_projection() { return *(mat4x4f*)&current_VP; }
+		mat4x4f& get_view_matrix() { return *(mat4x4f*)&view_matrix; }
+		mat4x4f& get_projection_matrix() { return *(mat4x4f*)&projection_matrix; }
 	#endif
 	} camera_upload_data;
 #endif // WAYLIB_NO_CAMERAS

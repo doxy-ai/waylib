@@ -231,8 +231,9 @@ typedef struct model {
 } model;
 
 typedef struct model_instance_data {
-	mat4x4f_ transform
-	; color tint
+	mat4x4f_ transform;
+	mat4x4f_ inverse_transform;
+	color tint
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {1, 1, 1, 1}
 #endif
@@ -240,6 +241,7 @@ typedef struct model_instance_data {
 
 #ifdef WAYLIB_ENABLE_CLASSES
 	inline mat4x4f& get_transform() { return *(mat4x4f*)&transform; }
+	inline mat4x4f& get_inverse_transform() { return *(mat4x4f*)&inverse_transform; }
 #endif
 } model_instance_data;
 
@@ -292,7 +294,8 @@ typedef struct model_instance_data {
 		camera2D settings2D;\
 		vec2i window_dimensions;\
 		char padding4[8];\
-		mat4x4f_ current_VP;
+		mat4x4f_ view_matrix;\
+		mat4x4f_ projection_matrix;
 
 #ifndef __cplusplus
 	// Camera, defines position/orientation in 3d space

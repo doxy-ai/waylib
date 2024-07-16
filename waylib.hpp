@@ -184,6 +184,15 @@ WAYLIB_OPTIONAL(texture) create_texture_from_image(
 #endif
 );
 
+WAYLIB_OPTIONAL(texture) create_texture_from_image(
+	wgpu_state state, 
+	WAYLIB_OPTIONAL(image)&& image, 
+	texture_config config
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
+);
+
 #ifdef WAYLIB_NAMESPACE_NAME
 }
 #endif

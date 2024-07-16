@@ -1,6 +1,6 @@
 #include "waylib.hpp"
 #include "window.hpp"
-#include "obj_loader.hpp"
+#include "model.hpp"
 #include "texture.hpp"
 
 #include "waylib.h" // Here so it won't keep getting auto added at the top!
@@ -20,18 +20,35 @@ const char* shaderSource = R"(
 
 @fragment
 fn fragment(vert: waylib_output_vertex) -> @location(0) vec4f {
-	let time = time.delta * 1400;
-	return vec4f(waylib_sample_color(vert.texcoords).rgb * time, 1);
+	let color = waylib_sample_color(vert.texcoords);
+	let time = time.delta * 800;
+	return vec4f(color.rgb * time, 1);
 })";
+
+	const char* skyplaneShaderSource = R"(
+#include <waylib/vertex>
+#include <waylib/textures>
+
+@fragment
+fn fragment(vert: waylib_output_vertex) -> @location(0) vec4f {
+	// Calculate the direction of the pixel
+	let clipSpacePos = vec4(vert.position.xy, 1, 1);
+	let worldSpacePos = inverse_view_projection_matrix() * clipSpacePos;
+	let direction = normalize(worldSpacePos.xyz - camera.settings3D.position);
+
+	// Equirectangularly project the direction
+	let longitude = degrees(atan2(direction.z, direction.x)) / 360;
+	let latitude = (degrees(acos(direction.y)) + 90) / 360;
+
+	// Sample the projection
+	return waylib_sample_color(vec2f(longitude, latitude));
+}
+)";
 
 int main() {
 	auto window = wl::create_window(800, 600, "waylib");
 	auto state = wl::create_default_device_from_window(window);
 	wl::window_automatically_reconfigure_surface_on_resize(window, state);
-
-	// Load the texture
-	wl::image img = wl::throw_if_null(wl::load_image("../test.exr"));
-	wl::texture color = wl::throw_if_null(wl::create_texture_from_image(state, img));
 
 	// Load the shader module
 	wl::model model = wl::throw_if_null(wl::load_obj_model("../suzane.obj", state));
@@ -41,7 +58,7 @@ int main() {
 		{.vertex_entry_point = "waylib_default_vertex_shader", .fragment_entry_point = "fragment", .name = "Default Shader", .preprocessor = p}
 	));
 	wl::material mat = wl::create_material(state, shader);
-	mat.textures[(size_t)wl::texture_slot::Color] = &color;
+	// mat.textures[(size_t)wl::texture_slot::Color] = &color;
 	model.materials = &mat;
 	model.material_count = 1;
 	model.mesh_materials = nullptr;
@@ -52,6 +69,14 @@ int main() {
 		.direction = glm::normalize(glm::vec3{-1, -1, 0}),
 		.color = {1, 1, 1, 1}, .intensity = 1
 	}};
+
+	wl::model skyplane = wl::throw_if_null(wl::create_fullscreen_quad(state, 
+		wl::create_shader(state, skyplaneShaderSource, {.fragment_entry_point = "fragment", .preprocessor = p})
+	, p));
+	// from: https://polyhaven.com/a/symmetrical_garden_02 
+	wl::texture sky = wl::throw_if_null(wl::create_texture_from_image(state, wl::load_image("../symmetrical_garden_02_1k.exr")));
+	skyplane.materials[0].textures[(size_t)wl::texture_slot::Color] = &sky;
+
 
 	wl::time time = {};
 	while(!wl::window_should_close(window)) {
@@ -65,6 +90,8 @@ int main() {
 		{
 			wl::window_begin_camera_mode3D(frame, window, camera, lights, time);
 			{
+				wl::model_draw(frame, skyplane);
+
 				wl::model_draw(frame, model);
 			}
 			wl::end_camera_mode(frame);

@@ -1,6 +1,7 @@
 #include "waylib.hpp"
 
 #include <chrono>
+#include <glm/ext/quaternion_common.hpp>
 #include <limits>
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/ext/matrix_clip_space.hpp>
@@ -64,7 +65,7 @@ wgpu::Buffer get_zero_buffer(wgpu_state state, size_t size) {
 	return zeroBuffer;
 };
 
-void upload_utility_data(wgpu_frame_state& frame, WAYLIB_OPTIONAL(camera_upload_data&) camera, std::span<light> lights, WAYLIB_OPTIONAL(time) time) {
+void upload_utility_data(wgpu_frame_state& frame, WAYLIB_OPTIONAL(camera_upload_data&) camera, std::span<light> lights, WAYLIB_OPTIONAL(time) time) WAYLIB_TRY {
 	static WGPUBufferDescriptor cameraBufferDesc = {
 		.label = "Waylib Camera Buffer",
 		.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform,
@@ -133,7 +134,7 @@ void upload_utility_data(wgpu_frame_state& frame, WAYLIB_OPTIONAL(camera_upload_
 
 	auto bindGroup = frame.state.device.createBindGroup(bindGroupDesc); WAYLIB_RELEASE_AT_FRAME_END(frame, bindGroup);
 	frame.render_pass.setBindGroup(1, bindGroup, 0, nullptr);
-}
+} WAYLIB_CATCH()
 void upload_utility_data(wgpu_frame_state* frame, WAYLIB_OPTIONAL(camera_upload_data*) data, light* lights, size_t light_count, WAYLIB_OPTIONAL(time) time) {
 	WAYLIB_OPTIONAL(camera_upload_data&) camera = data.has_value ? *data.value : WAYLIB_OPTIONAL(camera_upload_data&){};
 	upload_utility_data(*frame, camera, {lights, light_count}, time);
@@ -199,9 +200,9 @@ wgpu::Device create_default_device_from_instance(WGPUInstance instance, WGPUSurf
 	return adapter.requestDevice(deviceDesc);
 } WAYLIB_CATCH(nullptr)
 
-wgpu::Device create_default_device(WGPUSurface surface /*= nullptr*/, bool prefer_low_power /*= false*/) {
+wgpu::Device create_default_device(WGPUSurface surface /*= nullptr*/, bool prefer_low_power /*= false*/) WAYLIB_TRY {
 	return create_default_device_from_instance(wgpuCreateInstance({}), surface, prefer_low_power);
-}
+} WAYLIB_CATCH(nullptr)
 
 void release_device(WGPUDevice device, bool also_release_adapter /*= true*/, bool also_release_instance /*= true*/) WAYLIB_TRY {
 	wgpu::Adapter adapter = WAYLIB_C_TO_CPP_CONVERSION(wgpu::Device, device).getAdapter();
@@ -277,6 +278,9 @@ shader_preprocessor* preprocessor_initialize_virtual_filesystem(shader_preproces
 		preprocessor_initialize_platform_defines(processor, state);
 
 	preprocess_shader_from_memory_and_cache(processor,
+#include "shaders/waylib/inverse.wgsl"
+		, "waylib/inverse", config);
+	preprocess_shader_from_memory_and_cache(processor,
 #include "shaders/waylib/time.wgsl"
 		, "waylib/time", config);
 	preprocess_shader_from_memory_and_cache(processor,
@@ -292,11 +296,11 @@ shader_preprocessor* preprocessor_initialize_virtual_filesystem(shader_preproces
 #include "shaders/waylib/light.wgsl"
 		, "waylib/light", config);
 	preprocess_shader_from_memory_and_cache(processor,
-#include "shaders/waylib/vertex.wgsl"
-		, "waylib/vertex", config);
-	preprocess_shader_from_memory_and_cache(processor,
 #include "shaders/waylib/wireframe.wgsl"
 		, "waylib/wireframe", config);
+	preprocess_shader_from_memory_and_cache(processor,
+#include "shaders/waylib/vertex.wgsl"
+		, "waylib/vertex", config);
 	return processor;
 } WAYLIB_CATCH(nullptr)
 
@@ -700,7 +704,7 @@ void end_drawing(wgpu_frame_state& frame) WAYLIB_TRY {
 //////////////////////////////////////////////////////////////////////
 
 #ifndef WAYLIB_NO_CAMERAS
-mat4x4f camera3D_get_matrix(camera3D& camera, vec2i window_dimensions) {
+std::pair<mat4x4f, mat4x4f> camera3D_get_matrix_impl(camera3D& camera, vec2i window_dimensions) {
 	mat4x4f V = glm::lookAt(camera.position, camera.target, camera.up);
 	mat4x4f P;
 	if(camera.orthographic) {
@@ -709,11 +713,15 @@ mat4x4f camera3D_get_matrix(camera3D& camera, vec2i window_dimensions) {
 		P = glm::ortho<float>(-right, right, -top, top, camera.near_clip_distance, camera.far_clip_distance);
 	} else
 		P = glm::perspectiveFov<float>(camera.field_of_view, window_dimensions.x, window_dimensions.y, camera.near_clip_distance, camera.far_clip_distance);
+	return {V, P};
+}
+mat4x4f camera3D_get_matrix(camera3D& camera, vec2i window_dimensions) {
+	auto [V, P] = camera3D_get_matrix_impl(camera, window_dimensions);
 	return P * V;
 }
 mat4x4f camera3D_get_matrix(camera3D* camera, vec2i window_dimensions) { return camera3D_get_matrix(*camera, window_dimensions); }
 
-mat4x4f camera2D_get_matrix(camera2D& camera, vec2i window_dimensions) {
+std::pair<mat4x4f, mat4x4f> camera2D_get_matrix_impl(camera2D& camera, vec2i window_dimensions) {
 	window_dimensions /= std::abs(camera.zoom) < .01 ? 1 : 1 * camera.zoom;
 	vec3f position = {camera.target.x, camera.target.y, -1};
 	vec4f up = {0, 1, 0, 0};
@@ -721,58 +729,56 @@ mat4x4f camera2D_get_matrix(camera2D& camera, vec2i window_dimensions) {
 	auto P = glm::ortho<float>(0, window_dimensions.x, window_dimensions.y, 0, camera.near_clip_distance, camera.far_clip_distance);
 	if(!camera.pixel_perfect) P = glm::ortho<float>(0, 1/camera.zoom, 1/camera.zoom, 0, camera.near_clip_distance, camera.far_clip_distance);
 	auto V = glm::lookAt(position, position + vec3f{0, 0, 1}, up.xyz());
+	return {V, P};
+}
+mat4x4f camera2D_get_matrix(camera2D& camera, vec2i window_dimensions) {
+	auto [V, P] = camera2D_get_matrix_impl(camera, window_dimensions);
 	return P * V;
 }
 mat4x4f camera2D_get_matrix(camera2D* camera, vec2i window_dimensions) { return camera2D_get_matrix(*camera, window_dimensions); }
 
-void begin_camera_mode3D(wgpu_frame_state& frame, camera3D& camera, vec2i window_dimensions, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(time) time /*={}*/) {
+void begin_camera_mode3D(wgpu_frame_state& frame, camera3D& camera, vec2i window_dimensions, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(time) time /*={}*/) WAYLIB_TRY {
 	camera_upload_data data {
 		.is_3D = true,
 		.settings3D = camera,
 		.window_dimensions = window_dimensions,
 	};
-	data.get_current_view_projection() = camera3D_get_matrix(camera, window_dimensions);
+	std::tie(data.get_view_matrix(), data.get_projection_matrix()) = camera3D_get_matrix_impl(camera, window_dimensions);
 	upload_utility_data(frame, data, lights, time);
-}
+} WAYLIB_CATCH()
 void begin_camera_mode3D(wgpu_frame_state* frame, camera3D* camera, vec2i window_dimensions, light* lights /*= nullptr*/, size_t light_count /*=0*/, WAYLIB_OPTIONAL(time) time /*={}*/) {
 	begin_camera_mode3D(*frame, *camera, window_dimensions, {lights, light_count}, time);
 }
 
-void begin_camera_mode2D(wgpu_frame_state& frame, camera2D& camera, vec2i window_dimensions, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(time) time /*={}*/) {
+void begin_camera_mode2D(wgpu_frame_state& frame, camera2D& camera, vec2i window_dimensions, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(time) time /*={}*/) WAYLIB_TRY {
 	camera_upload_data data {
 		.is_3D = true,
 		.settings2D = camera,
 		.window_dimensions = window_dimensions,
 	};
-	data.get_current_view_projection() = camera2D_get_matrix(camera, window_dimensions);
+	std::tie(data.get_view_matrix(), data.get_projection_matrix()) = camera2D_get_matrix_impl(camera, window_dimensions);
 	upload_utility_data(frame, data, lights, time);
-}
+} WAYLIB_CATCH()
 void begin_camera_mode2D(wgpu_frame_state* frame, camera2D* camera, vec2i window_dimensions, light* lights /*= nullptr*/, size_t light_count /*=0*/, WAYLIB_OPTIONAL(time) time /*={}*/) {
 	begin_camera_mode2D(*frame, *camera, window_dimensions, {lights, light_count}, time);
 }
 
-void begin_camera_mode_identity(wgpu_frame_state& frame, vec2i window_dimensions, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(time) time /*={}*/) {
+void begin_camera_mode_identity(wgpu_frame_state& frame, vec2i window_dimensions, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(time) time /*={}*/) WAYLIB_TRY {
 	camera_upload_data data {
 		.is_3D = false,
 		.settings3D = {},
 		.settings2D = {},
 		.window_dimensions = window_dimensions,
 	};
-	data.get_current_view_projection() = glm::identity<glm::mat4x4>();
+	data.get_projection_matrix() = data.get_view_matrix() = glm::identity<glm::mat4x4>();
 	upload_utility_data(frame, data, lights, time);
-}
+} WAYLIB_CATCH()
 void begin_camera_mode_identity(wgpu_frame_state* frame, vec2i window_dimensions, light* lights /*= nullptr*/, size_t light_count /*=0*/, WAYLIB_OPTIONAL(time) time /*={}*/) {
 	begin_camera_mode_identity(*frame, window_dimensions);
 }
 
 void end_camera_mode(wgpu_frame_state& frame) {
-	camera_upload_data data {
-		.is_3D = false,
-		.settings3D = {},
-		.settings2D = {},
-	};
-	data.get_current_view_projection() = glm::identity<glm::mat4x4>();
-	upload_utility_data(frame, data, {}, {});
+	begin_camera_mode_identity(frame, vec2i(0), {}, {});
 }
 void end_camera_mode(wgpu_frame_state* frame) {
 	end_camera_mode(*frame);
@@ -931,8 +937,8 @@ material create_material(wgpu_state state, shader& shader, material_configuratio
 void model_upload(wgpu_state state, model& model) {
 	for(size_t i = 0; i < model.mesh_count; ++i)
 		mesh_upload(state, model.meshes[i]);
-	for(size_t i = 0; i < model.material_count; ++i)
-		material_upload(state, model.materials[i]);
+	// for(size_t i = 0; i < model.material_count; ++i) // TODO: How do we handle material configurations?
+	// 	material_upload(state, model.materials[i]);
 }
 void model_upload(wgpu_state state, model* model) {
 	model_upload(state, *model);
@@ -1022,7 +1028,8 @@ void model_draw_instanced(wgpu_frame_state* frame, model* model, model_instance_
 }
 
 void model_draw(wgpu_frame_state& frame, model& model) {
-	model_instance_data instance = {model.transform, {1, 1, 1, 1}};
+	model_instance_data instance = {model.transform, {}, {1, 1, 1, 1}};
+	instance.get_inverse_transform() = glm::inverse(model.get_transform());
 	model_draw_instanced(frame, model, {&instance, 1});
 }
 void model_draw(wgpu_frame_state* frame, model* model) {
@@ -1104,6 +1111,12 @@ WAYLIB_OPTIONAL(texture) create_texture_from_image(wgpu_state state, image& imag
 }
 WAYLIB_OPTIONAL(texture) create_texture_from_image(wgpu_state state, image* image, texture_config config /*= {}*/) {
 	return create_texture_from_image(state, *image, config);
+}
+WAYLIB_OPTIONAL(texture) create_texture_from_image(wgpu_state state, WAYLIB_OPTIONAL(image)&& image, texture_config config /*= {}*/) {
+	if(!image.has_value) return {};
+	auto imgPtr = new struct image(image.value);
+	imgPtr->heap_allocated = true;
+	return create_texture_from_image(state, imgPtr, config);
 }
 
 image texture_not_found_image(size_t dimensions) {
