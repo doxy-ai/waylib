@@ -16,6 +16,8 @@ R"(#pragma once
 @group(0) @binding(14) var ambient_occlusion_sampler: sampler;
 @group(0) @binding(15) var emission_texture: texture_2d<f32>;
 @group(0) @binding(16) var emission_sampler: sampler;
+@group(0) @binding(17) var cubemap_texture: texture_cube<f32>;
+@group(0) @binding(18) var cubemap_sampler: sampler;
 
 fn waylib_sample_color(uv: vec2f) -> vec4f { return textureSample(color_texture, color_sampler, uv); }
 fn waylib_sample_height(uv: vec2f) -> vec4f { return textureSample(height_texture, height_sampler, uv); }
@@ -25,4 +27,13 @@ fn waylib_sample_roughness(uv: vec2f) -> vec4f { return textureSample(roughness_
 fn waylib_sample_metalness(uv: vec2f) -> vec4f { return textureSample(metalness_texture, metalness_sampler, uv); }
 fn waylib_sample_ambient_occlusion(uv: vec2f) -> vec4f { return textureSample(ambient_occlusion_texture, ambient_occlusion_sampler, uv); }
 fn waylib_sample_emission(uv: vec2f) -> vec4f { return textureSample(emission_texture, emission_sampler, uv); }
+fn waylib_sample_cubemap(dir: vec3f) -> vec4f { return textureSample(cubemap_texture, cubemap_sampler, dir); }
+
+// fn gamma_correct_RGB(color: vec3f) -> vec3f {
+// 	const gamma = 2.2;
+// 	return pow(color, vec3(gamma));
+// }
+// fn gamma_correct(color: vec4f) -> vec4f {
+// 	return vec4f(gamma_correct_RGB(color.rgb), color.a);
+// }
 )"

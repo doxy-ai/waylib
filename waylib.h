@@ -159,6 +159,10 @@ struct texture_config {
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= wgpu::AddressMode::Repeat
 #endif
+	; bool cubemap
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= false
+#endif
 	 
 
 	// Note: The following settings are overwritten when creating from an image!
@@ -466,6 +470,7 @@ WAYLIB_OPTIONAL(texture) create_texture_from_image(
 );
 
 WAYLIB_OPTIONAL(const texture*) get_default_texture(wgpu_state state);
+WAYLIB_OPTIONAL(const texture*) get_default_cube_texture(wgpu_state state);
 
 #ifdef __cplusplus
 } // End extern "C"

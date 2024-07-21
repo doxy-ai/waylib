@@ -33,6 +33,8 @@
 	}
 #endif
 
+#define WAYLIB_NULLABLE(type) type
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -68,8 +70,8 @@ typedef struct color8 {
 typedef struct image {
 	bool float_data;
 	union {
-		color8* data;           // Image raw data
-		color* data32;
+		color8* data;
+		color* data32;      // Image raw data
 	};
 	int width;              // Image base width
 	int height;             // Image base height
@@ -98,6 +100,7 @@ WAYLIB_ENUM texture_slot {
 	C_PREPEND(TEXTURE_SLOT_, Metalness),
 	C_PREPEND(TEXTURE_SLOT_, AmbientOcclusion),
 	C_PREPEND(TEXTURE_SLOT_, Emission),
+	C_PREPEND(TEXTURE_SLOT_, Cubemap),
 	// Count of how many slots are supported
 	C_PREPEND(TEXTURE_SLOT_, Max),
 };
@@ -135,7 +138,7 @@ typedef struct shader {
 typedef struct material {
 	index_t shaderCount;
 	shader* shaders;
-	WAYLIB_OPTIONAL(texture*) textures[WAYLIB_TEXTURE_SLOT_COUNT];
+	WAYLIB_NULLABLE(texture*) textures[WAYLIB_TEXTURE_SLOT_COUNT];
 	WAYLIB_C_OR_CPP_TYPE(WGPURenderPipeline, wgpu::RenderPipeline) pipeline;
 	bool heap_allocated // Wether or not this material is stored on the heap and should be automatically cleaned up
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
@@ -145,7 +148,7 @@ typedef struct material {
 
 #ifdef WAYLIB_ENABLE_CLASSES
 	inline std::span<shader> get_shaders() { return {shaders, shaderCount}; }
-	inline std::span<WAYLIB_OPTIONAL(texture*), WAYLIB_TEXTURE_SLOT_COUNT> get_textures() { return {textures}; }
+	inline std::span<WAYLIB_NULLABLE(texture*), WAYLIB_TEXTURE_SLOT_COUNT> get_textures() { return {textures}; }
 #endif
 } material;
 
@@ -385,9 +388,40 @@ typedef struct time {
 } time;
 
 
-const char* get_error_message();
-void set_error_message_raw(const char* message);
+WAYLIB_NULLABLE(const char*) get_error_message();
+void set_error_message_raw(WAYLIB_NULLABLE(const char*) message);
 void clear_error_message();
+
+color convert_to_color(const color8 c);
+color8 convert_to_color8(const color c);
+
+WAYLIB_NULLABLE(void*) image_get_frame_and_size(
+	size_t* out_size,
+	image* image, 
+	size_t frame, 
+	size_t mip_level
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= 0
+#endif
+);
+
+WAYLIB_NULLABLE(void*) image_get_frame(
+	image* image, 
+	size_t frame, 
+	size_t mip_level
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= 0
+#endif
+);
+
+WAYLIB_OPTIONAL(image) merge_images(
+	image* images, 
+	size_t images_size,
+	bool free_incoming
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
+);
 
 #ifdef __cplusplus
 } // End extern "C"

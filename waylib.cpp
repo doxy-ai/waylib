@@ -1,6 +1,11 @@
 #include "waylib.hpp"
+#include "common.h"
+#include "config.h"
+#include "waylib.h"
 
+#include <cassert>
 #include <chrono>
+#include <cstring>
 #include <glm/ext/quaternion_common.hpp>
 #include <limits>
 #include <glm/ext/matrix_transform.hpp>
@@ -51,7 +56,7 @@ wgpu::Buffer get_zero_buffer(wgpu_state state, size_t size) {
 		.mappedAtCreation = false,
 	};
 	static wgpu::Buffer zeroBuffer;
-	
+
 	if(!zeroBuffer || size > bufferDesc.size) {
 		bufferDesc.size = size;
 		std::vector<std::byte> zeroData(bufferDesc.size, std::byte{0});
@@ -500,10 +505,11 @@ namespace detail{
 // #Begin/End Drawing
 //////////////////////////////////////////////////////////////////////
 
-std::array<WGPUBindGroupEntry, 16> enumerate_texture_bindings(wgpu_frame_state& frame, std::span<WAYLIB_OPTIONAL(texture*), WAYLIB_TEXTURE_SLOT_COUNT> textures) {
+std::array<WGPUBindGroupEntry, 18> enumerate_texture_bindings(wgpu_frame_state& frame, std::span<WAYLIB_NULLABLE(texture*), WAYLIB_TEXTURE_SLOT_COUNT> textures) {
 	static const texture& default_texture = *throw_if_null(get_default_texture(frame.state));
-	static std::array<WGPUBindGroupEntry, 16> bindings = [] {
-		std::array<WGPUBindGroupEntry, 16> bindings = {WGPUBindGroupEntry{
+	static const texture& default_cube_texture = *throw_if_null(get_default_cube_texture(frame.state));
+	static std::array<WGPUBindGroupEntry, 18> bindings = [] {
+		std::array<WGPUBindGroupEntry, 18> bindings = {WGPUBindGroupEntry{
 			.binding = 1,
 			.textureView = default_texture.view,
 		}, WGPUBindGroupEntry{
@@ -520,12 +526,13 @@ std::array<WGPUBindGroupEntry, 16> enumerate_texture_bindings(wgpu_frame_state& 
 	}();
 
 	for(size_t i = 0; i < textures.size(); ++i)
-		if(textures[i].has_value) {
-			auto& texture = *textures[i].value;
+		if(textures[i]) {
+			auto& texture = *textures[i];
 			bindings[2 * i + 0].textureView = texture.view;
 			bindings[2 * i + 1].sampler = texture.sampler;
 		} else {
-			bindings[2 * i + 0].textureView = default_texture.view;
+			bindings[2 * i + 0].textureView = i == (size_t)texture_slot::Cubemap ? default_cube_texture.view : default_texture.view;
+			// bindings[2 * i + 1].sampler = i == (size_t)texture_slot::Cubemap ? default_cube_texture.sampler : default_texture.sampler;
 			bindings[2 * i + 1].sampler = default_texture.sampler;
 		}
 
@@ -533,17 +540,17 @@ std::array<WGPUBindGroupEntry, 16> enumerate_texture_bindings(wgpu_frame_state& 
 }
 
 void setup_default_bindings(wgpu_frame_state& frame) {
-	static std::array<WGPUBindGroupEntry, 17> bindings = [&frame]{
+	static std::array<WGPUBindGroupEntry, 19> bindings = [&frame]{
 		size_t size = create_pipeline_globals(frame.state).min_buffer_size;
-		std::array<WGPUBindGroupEntry, 17> bindings{WGPUBindGroupEntry{
+		std::array<WGPUBindGroupEntry, 19> bindings{WGPUBindGroupEntry{
 			.binding = 0,
 			.buffer = get_zero_buffer(frame.state, size),
 			.offset = 0,
 			.size = size,
 		}};
-		auto null = std::array<WAYLIB_OPTIONAL(texture*), WAYLIB_TEXTURE_SLOT_COUNT>{};
-		std::array<WGPUBindGroupEntry, 16> textureBindings = enumerate_texture_bindings(frame, null);
-		std::copy(textureBindings.begin(), textureBindings.end(), bindings.begin() + 1);
+		auto null = std::array<WAYLIB_NULLABLE(texture*), WAYLIB_TEXTURE_SLOT_COUNT>{}; null.fill(nullptr);
+		std::array<WGPUBindGroupEntry, 18> textureBindings = enumerate_texture_bindings(frame, null);
+		std::move(textureBindings.begin(), textureBindings.end(), bindings.begin() + 1);
 		return bindings;
 	}();
 	static wgpu::BindGroup defaultBindGroup = [&frame] {
@@ -559,9 +566,6 @@ void setup_default_bindings(wgpu_frame_state& frame) {
 
 	// Passing nothing to upload_utility_data binds everything to zero!
 	upload_utility_data(frame, {}, {}, {});
-	// // By default we pass a camera view that does nothing and zeros for the rest of utility
-	// vec2i dim = {frame.depth_texture.getWidth(), frame.depth_texture.getHeight()};
-	// begin_camera_mode_identity(frame, dim, {}, {});
 }
 
 WAYLIB_OPTIONAL(wgpu_frame_state) begin_drawing_render_texture(wgpu_state state, WGPUTextureView render_texture, vec2i render_texture_dimensions, WAYLIB_OPTIONAL(color) clear_color /*= {}*/) WAYLIB_TRY {
@@ -951,7 +955,7 @@ void model_draw_instanced(wgpu_frame_state& frame, model& model, std::span<model
 		.size = sizeof(model_instance_data),
 		.mappedAtCreation = false,
 	};
-	static std::array<WGPUBindGroupEntry, 17> bindings = {WGPUBindGroupEntry{
+	static std::array<WGPUBindGroupEntry, 19> bindings = {WGPUBindGroupEntry{
 		.binding = 0,
 		.buffer = get_zero_buffer(frame.state, bufferDesc.size),
 		.offset = 0,
@@ -983,7 +987,7 @@ void model_draw_instanced(wgpu_frame_state& frame, model& model, std::span<model
 		frame.render_pass.setPipeline(mat.pipeline);
 		// Figure out which textures to use from the material
 		auto tex = enumerate_texture_bindings(frame, mat.get_textures());
-		std::copy(tex.begin(), tex.end(), bindings.begin() + 1);
+		std::move(tex.begin(), tex.end(), bindings.begin() + 1);
 
 		// Bind the instance and texture buffers
 		wgpu::BindGroup bindGroup = frame.state.device.createBindGroup(bindGroupDesc); WAYLIB_RELEASE_AT_FRAME_END(frame, bindGroup);
@@ -1041,6 +1045,8 @@ void model_draw(wgpu_frame_state* frame, model* model) {
 //////////////////////////////////////////////////////////////////////
 
 WAYLIB_OPTIONAL(texture) create_texture(wgpu_state state, vec2i dimensions, texture_config config /*= {}*/) {
+	if(config.cubemap) assert(config.frames % 6 == 0); // Cubemaps need to have a multiple of 6 images
+
 	texture out{.cpu_data = nullptr, .heap_allocated = false};
 	// Create the color texture
 	wgpu::TextureDescriptor textureDesc = wgpu::Default;
@@ -1061,7 +1067,7 @@ WAYLIB_OPTIONAL(texture) create_texture(wgpu_state state, vec2i dimensions, text
 	textureViewDesc.arrayLayerCount = config.frames;
 	textureViewDesc.baseMipLevel = 0;
 	textureViewDesc.mipLevelCount = config.mipmaps;
-	textureViewDesc.dimension = wgpu::TextureViewDimension::_2D;
+	textureViewDesc.dimension = config.cubemap ? wgpu::TextureViewDimension::Cube : wgpu::TextureViewDimension::_2D;
 	textureViewDesc.format = textureDesc.format;
 	out.view = out.gpu_data.createView(textureViewDesc);
 	// std::cout << "Texture view: " << out.view << std::endl;
@@ -1089,6 +1095,7 @@ WAYLIB_OPTIONAL(texture) create_texture_from_image(wgpu_state state, image& imag
 	config.mipmaps = image.mipmaps;
 	auto _out = create_texture(state, {image.width, image.height}, config);
 	if(!_out.has_value) return _out; auto out = _out.value;
+	out.cpu_data = &image;
 
 	// Upload texture data
 	// Arguments telling which part of the texture we upload to
@@ -1106,7 +1113,7 @@ WAYLIB_OPTIONAL(texture) create_texture_from_image(wgpu_state state, image& imag
 	source.rowsPerImage = image.height;
 
 	wgpu::Extent3D size = {static_cast<uint32_t>(image.width), static_cast<uint32_t>(image.height), static_cast<uint32_t>(image.frames)};
-	state.device.getQueue().writeTexture(destination, image.data, image.width * image.height * (image.float_data ? sizeof(color) : sizeof(color8)), source, size);
+	state.device.getQueue().writeTexture(destination, image.data, image.width * image.height * (image.float_data ? sizeof(color) : sizeof(color8)) * image.frames, source, size);
 	return out;
 }
 WAYLIB_OPTIONAL(texture) create_texture_from_image(wgpu_state state, image* image, texture_config config /*= {}*/) {
@@ -1145,7 +1152,17 @@ WAYLIB_OPTIONAL(const texture*) get_default_texture(wgpu_state state) {
 
 	if(texture.has_value) return &texture.value;
 	return {};
-} 
+}
+WAYLIB_OPTIONAL(const texture*) get_default_cube_texture(wgpu_state state) {
+	static image image = [] {
+		std::array<WAYLIB_NAMESPACE_NAME::image, 6> faces; faces.fill(texture_not_found_image(16));
+		return merge_images(faces).value;
+	}();
+	static WAYLIB_OPTIONAL(texture) texture = create_texture_from_image(state, image, {.color_filter = wgpu::FilterMode::Nearest, .cubemap = true});
+
+	if(texture.has_value) return &texture.value;
+	return {};
+}
 
 #ifdef WAYLIB_NAMESPACE_NAME
 }

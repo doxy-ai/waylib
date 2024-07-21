@@ -81,7 +81,7 @@ window* create_window(size_t width, size_t height, const char* title /*= "waylib
 	return glfwCreateWindow(width, height, title, config.fullscreen.monitor, nullptr);
 }
 window* create_window(size_t width, size_t height, std::string_view title, window_initialization_configuration config /*= default*/) {
-	return create_window(width, height, title.data(), config);
+	return create_window(width, height, cstring_from_view(title.data()), config);
 }
 
 void release_window(window* window) {

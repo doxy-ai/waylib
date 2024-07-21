@@ -1,5 +1,4 @@
 #pragma once
-#include <vector>
 #include <webgpu/webgpu.hpp>
 
 #include "math.hpp"
@@ -8,6 +7,8 @@
 #include <cstddef>
 #include <type_traits>
 #include <span>
+#include <vector>
+#include <string_view>
 
 #ifdef __cpp_exceptions
 #include <stdexcept>
@@ -59,6 +60,12 @@ struct pipeline_globals {
 	};
 #endif // WAYLIB_NO_LIGHTS
 
+template<size_t extent = std::dynamic_extent>
+union image_data_span {
+	std::span<color8, extent> data;
+	std::span<color, extent> data32;
+};
+
 // TODO: Is there an alternative to std::function we can use?
 struct wgpu_frame_finalizers: public std::vector<std::function<void()>> { using std::vector<std::function<void()>>::vector; };
 #define WAYLIB_RELEASE_AT_FRAME_END(frame, variable) frame.finalizers->emplace_back([variable]() mutable { variable.release(); })
@@ -79,18 +86,61 @@ std::string get_error_message_and_clear();
 		auto msg = get_error_message_and_clear();
 		throw error(msg.empty() ? "Null value encountered" : msg);
 	}
+	template<typename T>
+	T& throw_if_null(const WAYLIB_NULLABLE(T*) opt) {
+		if(opt) return *opt;
+
+		auto msg = get_error_message_and_clear();
+		throw error(msg.empty() ? "Null value encountered" : msg);
+	}
 #else
 	template<typename T>
 	T throw_if_null(const WAYLIB_OPTIONAL(T)& opt) {
 		assert(opt.has_value, get_error_message());
 		return opt.value;
 	}
+	template<typename T>
+	T& throw_if_null(const WAYLIB_NULLABLE(T*) opt) {
+		assert(opt, get_error_message());
+		return *opt;
+	}
 #endif
 void set_error_message(const std::string_view view);
 void set_error_message(const std::string& str);
 
+// Creates a c-string from a string view 
+// (if the string view doesn't point to a valid cstring a temporary one that 
+//		is only valid until the next time this function is called is created)
+template<size_t uniqueID = 0>
+inline const char* cstring_from_view(const std::string_view view) {
+	static std::string tmp;
+	if(view.data()[view.size()] == '\0') return view.data();
+	tmp = view;
+	return tmp.c_str();
+}
+
+color convert(const color8& c);
+color8 convert(const color& c);
+
 // Not recommended to be used directly!
 pipeline_globals& create_pipeline_globals(wgpu_state state);
+
+WAYLIB_NULLABLE(image_data_span<>) image_get_frame(
+	image& image, 
+	size_t frame, 
+	size_t mip_level
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= 0
+#endif
+);
+
+WAYLIB_OPTIONAL(image) merge_images(
+	std::span<image> images, 
+	bool free_incoming
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
+);
 
 #ifdef WAYLIB_NAMESPACE_NAME
 }

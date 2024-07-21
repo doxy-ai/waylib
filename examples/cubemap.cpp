@@ -3,16 +3,8 @@
 #include "model.hpp"
 #include "texture.hpp"
 
-#include "waylib.h" // Here so it won't keep getting auto added at the top!
-#include "window.h"
-#include "common.h"
-#include "common.hpp"
-#include "config.h"
-#include "texture.h"
-
 #include <glm/geometric.hpp>
 #include <iostream>
-#include <string_view>
 
 const char* shaderSource = R"(
 #include <waylib/time>
@@ -72,12 +64,15 @@ fn fragment(vert: waylib_output_vertex) -> @location(0) vec4f {
 		wl::create_shader(state, skyplaneShaderSource, {.fragment_entry_point = "fragment", .preprocessor = p})
 	, p));
 	// From: https://learnopengl.com/Advanced-OpenGL/Cubemaps
-	auto cubemapPaths = std::array<std::string_view, 6>{
-		"../skybox/right.jpg", "../skybox/left.jpg",
-		"../skybox/top.jpg", "../skybox/bottom.jpg",
-		"../skybox/front.jpg", "../skybox/back.jpg"
+	std::array<wl::image, 6> cubemapImages = {
+		wl::throw_if_null(wl::load_image("../skybox/right.jpg")),
+		wl::throw_if_null(wl::load_image("../skybox/left.jpg")),
+		wl::throw_if_null(wl::load_image("../skybox/top.jpg")),
+		wl::throw_if_null(wl::load_image("../skybox/bottom.jpg")),
+		wl::throw_if_null(wl::load_image("../skybox/front.jpg")),
+		wl::throw_if_null(wl::load_image("../skybox/back.jpg"))
 	};
-	wl::image cubemapImg = wl::throw_if_null(wl::load_images_as_frames(cubemapPaths));
+	wl::image cubemapImg = wl::throw_if_null(wl::merge_images(cubemapImages));
 	wl::texture sky = wl::throw_if_null(wl::create_texture_from_image(state, cubemapImg, {.cubemap = true}));
 	skyplane.materials[0].textures[(size_t)wl::texture_slot::Cubemap] = &sky;
 
