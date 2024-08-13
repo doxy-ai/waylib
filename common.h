@@ -45,10 +45,16 @@ struct camera_globals;
 typedef struct color {
 	float r, g, b, a;
 } color;
+#ifdef __cplusplus
+	template struct optional<color>;
+#endif
 
 typedef struct color8 {
 	unsigned char r, g, b, a;
 } color8;
+#ifdef __cplusplus
+	template struct optional<color8>;
+#endif
 
 
 // typedef struct {
@@ -90,6 +96,9 @@ typedef struct image {
 #endif
 	;
 } image;
+#ifdef __cplusplus
+	template struct optional<image>;
+#endif
 
 WAYLIB_ENUM texture_slot {
 	C_PREPEND(TEXTURE_SLOT_, Color) = 0,
@@ -117,6 +126,9 @@ typedef struct texture {
 #endif
 	;
 } texture;
+#ifdef __cplusplus
+	template struct optional<texture>;
+#endif
 
 // Shader
 typedef struct shader {
@@ -133,6 +145,9 @@ typedef struct shader {
 #endif
 	;
 } shader;
+#ifdef __cplusplus
+	template struct optional<shader>;
+#endif
 
 // Material
 typedef struct material {
@@ -151,12 +166,18 @@ typedef struct material {
 	inline std::span<WAYLIB_NULLABLE(texture*), WAYLIB_TEXTURE_SLOT_COUNT> get_textures() { return {textures}; }
 #endif
 } material;
+#ifdef __cplusplus
+	template struct optional<material>;
+#endif
 
 typedef struct pbr_material {
 	material base; // "Inherits" from material
 
 
 } pbr_material;
+#ifdef __cplusplus
+	template struct optional<pbr_material>;
+#endif
 
 // Mesh, vertex data
 // From: raylib.h
@@ -188,6 +209,9 @@ typedef struct mesh {
 	WAYLIB_C_OR_CPP_TYPE(WGPUBuffer, wgpu::Buffer) indexBuffer; // Pointer to the index data on the gpu
 	WAYLIB_C_OR_CPP_TYPE(WGPUBuffer, wgpu::Buffer) instanceBuffer; // Pointer to the per-instance data on the gpu
 } mesh;
+#ifdef __cplusplus
+	template struct optional<mesh>;
+#endif
 
 // Bone, skeletal animation bone
 // From: raylib.h
@@ -232,6 +256,9 @@ typedef struct model {
 	}
 #endif
 } model;
+#ifdef __cplusplus
+	template struct optional<model>;
+#endif
 
 typedef struct model_instance_data {
 	mat4x4f_ transform;
@@ -247,6 +274,9 @@ typedef struct model_instance_data {
 	inline mat4x4f& get_inverse_transform() { return *(mat4x4f*)&inverse_transform; }
 #endif
 } model_instance_data;
+#ifdef __cplusplus
+	template struct optional<model_instance_data>;
+#endif
 
 #ifndef WAYLIB_NO_CAMERAS
 	#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
@@ -368,6 +398,9 @@ typedef struct wgpu_state {
 	WAYLIB_C_OR_CPP_TYPE(WGPUDevice, wgpu::Device) device;
 	WAYLIB_C_OR_CPP_TYPE(WGPUSurface, wgpu::Surface) surface;
 } wgpu_state;
+#ifdef __cplusplus
+	template struct optional<wgpu_state>;
+#endif
 
 struct wgpu_frame_finalizers;
 
@@ -380,12 +413,18 @@ typedef struct wgpu_frame_state {
 	WAYLIB_C_OR_CPP_TYPE(WGPURenderPassEncoder, wgpu::RenderPassEncoder) render_pass;
 	wgpu_frame_finalizers* finalizers;
 } wgpu_frame_state;
+#ifdef __cplusplus
+	template struct optional<wgpu_frame_state>;
+#endif
 
 typedef struct time {
 	float since_start;
 	float delta;
 	float average_delta;
 } time;
+#ifdef __cplusplus
+	template struct optional<time>;
+#endif
 
 
 WAYLIB_NULLABLE(const char*) get_error_message();

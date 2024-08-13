@@ -469,6 +469,9 @@ WAYLIB_OPTIONAL(texture) create_texture_from_image(
 #endif
 );
 
+#ifdef __cplusplus
+	template struct optional<const texture*>;
+#endif
 WAYLIB_OPTIONAL(const texture*) get_default_texture(wgpu_state state);
 WAYLIB_OPTIONAL(const texture*) get_default_cube_texture(wgpu_state state);
 

@@ -86,7 +86,7 @@ fn fragment(vert: waylib_output_vertex) -> @location(0) vec4f {
 	while(!wl::window_should_close(window)) {
 		wl::time_calculations(time);
 
-		camera.position = wl::vec3f(2 * wl::cos(time.since_start), wl::sin(time.since_start / 4), 2 * wl::sin(time.since_start));
+		camera.position = wl::vec3f(2 * std::cos(time.since_start), std::sin(time.since_start / 4), 2 * std::sin(time.since_start));
 
 		auto frame = wl::throw_if_null(
 			wl::begin_drawing(state, wl::color{0.9, .1,  0.2, 1})

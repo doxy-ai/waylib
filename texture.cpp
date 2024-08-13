@@ -57,7 +57,7 @@ namespace detail {
 	}
 
 	std::string get_extension(const char* file_path) {
-		return std::filesystem::path(file_path).extension();
+		return std::filesystem::path(file_path).extension().string();
 	}
 }
 

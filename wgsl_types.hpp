@@ -21,7 +21,9 @@ using namespace glm;
 namespace detail {
 	template<size_t Size, typename Type>
 	struct vec_t {
+#ifndef _MSC_VER 
 		static_assert(false, "You are attempting to use a vector type not supported by WAYLIB!");
+#endif
 		using type = void;
 	};
 
@@ -41,7 +43,9 @@ namespace detail {
 
 	template<size_t Rows, size_t Cols, typename Type>
 	struct mat_t {
+#ifndef _MSC_VER 
 		static_assert(false, "You are attempting to use a matrix type not supported by WAYLIB!");
+#endif
 		using type = void;
 	};
 

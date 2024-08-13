@@ -1,4 +1,11 @@
 #pragma once
+
+#ifdef _MSC_VER 
+#pragma warning (push)
+#pragma warning (disable : 4190) // Disable warning about incompatible C linkage
+#define NOMINMAX
+#endif
+
 #ifdef __cplusplus
 	#ifndef WAYLIB_DISABLE_CLASSES
 	#define WAYLIB_ENABLE_CLASSES
@@ -21,15 +28,11 @@
 	#define WAYLIB_C_OR_CPP_TYPE(ctype, cpptype) ctype
 #endif
 
-#include "thirdparty/macroutil.h"
-
 #if defined(__cplusplus) && defined(__cpp_exceptions)
 	#define WAYLIB_TRY try
 
 	// Catches any exception and returns its argument as the function's default value if it catches anything
-	#define WAYLIB_CATCH(...) OVERLOADED_MACRO(WAYLIB_CATCH, __VA_ARGS__)
-	#define WAYLIB_CATCH0() catch(std::exception e) { set_error_message_raw(e.what()); return; }
-	#define WAYLIB_CATCH1(ret) catch(std::exception e) { set_error_message_raw(e.what()); return ret; }
+	#define WAYLIB_CATCH(ret) catch(const std::exception& e) { set_error_message_raw(e.what()); return ret; }
 #else
 	#define WAYLIB_TRY
 	#define WAYLIB_CATCH(...)

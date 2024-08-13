@@ -25,7 +25,7 @@ namespace detail {
 
 	std::string process_pragma_once(std::string data, const std::filesystem::path& path) {
 		if(auto once = data.find("#pragma once"); once != std::string::npos) {
-			std::string guard = path;
+			std::string guard = path.string();
 			std::transform(guard.begin(), guard.end(), guard.begin(), [](char c) -> char {
 				if(!std::isalnum(c)) return '_';
 				return std::toupper(c);
@@ -40,7 +40,7 @@ namespace detail {
 	std::optional<std::string> read_entire_file(std::filesystem::path path, const preprocess_shader_config& config = {}) {
 		std::ifstream fin(path);
 		if(!fin) {
-			set_error_message("Failed to open file `" + std::string(path) + "`... does it exist?");
+			set_error_message("Failed to open file `" + path.string() + "`... does it exist?");
 			return {};
 		}
 		fin.seekg(0, std::ios::end);
@@ -104,7 +104,7 @@ namespace detail {
 				if(isSystem) WAYLIB_NON_SYSTEM_PATHS
 				#undef WAYLIB_NON_SYSTEM_PATHS
 
-				set_error_message("Included file `" + std::string(path) + "` could not be found!");
+				set_error_message("Included file `" + path.string() + "` could not be found!");
 				throw PreprocessFailed{};
 			}, config.remove_comments});
 
@@ -120,7 +120,7 @@ namespace detail {
 		if(config.support_pragma_once) data = process_pragma_once(_data, path);
 		else data = _data;
 
-		config.path = path.c_str();
+		config.path = path.string().c_str();
 		if(auto res = preprocess_shader_from_memory(processor, data, config); res) {
 			processor->file_cache[path] = data;
 			return *res;

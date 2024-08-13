@@ -100,11 +100,11 @@ WAYLIB_TRY {
 	tinyobj::ObjReaderConfig reader_config;
 	reader_config.triangulate = true;
 	reader_config.vertex_color = true;
-	reader_config.mtl_search_path = path.parent_path(); // Path to material files
+	reader_config.mtl_search_path = path.parent_path().string(); // Path to material files
 
 	tinyobj::ObjReader reader;
 
-	if (!reader.ParseFromFile(path, reader_config)) {
+	if (!reader.ParseFromFile(path.string(), reader_config)) {
 		if (!reader.Error().empty())
 			set_error_message(reader.Error());
 		return {};

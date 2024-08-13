@@ -30,7 +30,9 @@
 #include <string>
 
 #if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
+    #define NOMINMAX
     #include <windows.h>
+    #include <shellapi.h>
 #else
     #include <cstdlib>
 #endif
@@ -42,9 +44,9 @@ namespace OPEN_URL_NAMESPACE {
 inline bool open_url(std::string_view url) {
 
 #if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
-    return ShellExecuteA(NULL, "open", std::string(url)).c_str(), NULL, NULL, SW_SHOWNORMAL) >= 32;
+    return size_t(ShellExecuteA(NULL, "open", std::string(url).c_str(), NULL, NULL, SW_SHOWNORMAL)) >= 32;
 #elif __APPLE__
-    return system(( "open " + std::string(url)).c_str()) != -1;
+    return system(("open " + std::string(url)).c_str()) != -1;
 #elif __linux__
     return system(("xdg-open " + std::string(url)).c_str()) != -1;
 #else

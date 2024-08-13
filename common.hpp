@@ -9,6 +9,7 @@
 #include <span>
 #include <vector>
 #include <string_view>
+#include <array>
 
 #ifdef __cpp_exceptions
 #include <stdexcept>
