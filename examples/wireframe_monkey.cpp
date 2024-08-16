@@ -58,7 +58,7 @@ int main() {
 
 	wl::camera3D camera = {{0, 1, -1}, {}, {0, 0, 0}};
 
-	wl::time time = {};
+	wl::frame_time time = {};
 	while(!wl::window_should_close(window)) {
 		wl::time_calculations(time);
 

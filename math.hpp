@@ -1,5 +1,9 @@
 #pragma once
 
+#include <cstdint>
+#include <cstddef>
+#include <type_traits>
+
 #include "wgsl_types.hpp"
 
 #ifdef WAYLIB_NAMESPACE_NAME
@@ -65,6 +69,23 @@ inline float radian::degree_value() const { return degree(*this); }
 
 inline degree rad_to_deg(radian r) { return r; }
 inline radian deg_to_rad(degree d) { return d; }
+
+
+
+float sin(radian);
+float cos(radian);
+float tan(radian);
+radian asin(float);
+radian acos(float);
+radian atan(float);
+radian atan2(float y, float x);
+radian atan_vec(vec2f);
+float sinh(radian);
+float cosh(radian);
+float tanh(radian);
+radian asinh(float);
+radian acosh(float);
+radian atanh(float);
 
 #ifdef WAYLIB_NAMESPACE_NAME
 }

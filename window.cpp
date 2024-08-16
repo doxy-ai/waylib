@@ -151,25 +151,25 @@ wgpu_state create_default_device_from_window(window* window, bool prefer_low_pow
 }
 
 #ifndef WAYLIB_NO_CAMERAS
-void window_begin_camera_mode3D(wgpu_frame_state* frame, window* window, camera3D* camera, light* lights /*= nullptr*/, size_t light_count /*=0*/, WAYLIB_OPTIONAL(time) time /*={}*/) {
-	begin_camera_mode3D(*frame, *camera, window_get_dimensions(window), {lights, light_count}, time);
+void window_begin_camera_mode3D(wgpu_frame_state* frame, window* window, camera3D* camera, light* lights /*= nullptr*/, size_t light_count /*=0*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) {
+	begin_camera_mode3D(*frame, *camera, window_get_dimensions(window), {lights, light_count}, frame_time);
 }
-void window_begin_camera_mode3D(wgpu_frame_state& frame, window* window, camera3D& camera, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(time) time /*={}*/) {
-	begin_camera_mode3D(frame, camera, window_get_dimensions(window), lights, time);
-}
-
-void window_begin_camera_mode2D(wgpu_frame_state* frame, window* window, camera2D* camera, light* lights /*= nullptr*/, size_t light_count /*=0*/, WAYLIB_OPTIONAL(time) time /*={}*/) {
-	begin_camera_mode2D(*frame, *camera, window_get_dimensions(window), {lights, light_count}, time);
-}
-void window_begin_camera_mode2D(wgpu_frame_state& frame, window* window, camera2D& camera, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(time) time /*={}*/) {
-	begin_camera_mode2D(frame, camera, window_get_dimensions(window), lights, time);
+void window_begin_camera_mode3D(wgpu_frame_state& frame, window* window, camera3D& camera, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) {
+	begin_camera_mode3D(frame, camera, window_get_dimensions(window), lights, frame_time);
 }
 
-void window_begin_camera_mode_identity(wgpu_frame_state* frame, window* window, light* lights /*= nullptr*/, size_t light_count /*=0*/, WAYLIB_OPTIONAL(time) time /*={}*/) {
-	begin_camera_mode_identity(*frame, window_get_dimensions(window), {lights, light_count}, time);
+void window_begin_camera_mode2D(wgpu_frame_state* frame, window* window, camera2D* camera, light* lights /*= nullptr*/, size_t light_count /*=0*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) {
+	begin_camera_mode2D(*frame, *camera, window_get_dimensions(window), {lights, light_count}, frame_time);
 }
-void window_begin_camera_mode_identity(wgpu_frame_state& frame, window* window, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(time) time /*={}*/) {
-	begin_camera_mode_identity(frame, window_get_dimensions(window), lights, time);
+void window_begin_camera_mode2D(wgpu_frame_state& frame, window* window, camera2D& camera, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) {
+	begin_camera_mode2D(frame, camera, window_get_dimensions(window), lights, frame_time);
+}
+
+void window_begin_camera_mode_identity(wgpu_frame_state* frame, window* window, light* lights /*= nullptr*/, size_t light_count /*=0*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) {
+	begin_camera_mode_identity(*frame, window_get_dimensions(window), {lights, light_count}, frame_time);
+}
+void window_begin_camera_mode_identity(wgpu_frame_state& frame, window* window, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) {
+	begin_camera_mode_identity(frame, window_get_dimensions(window), lights, frame_time);
 }
 #endif // WAYLIB_NO_CAMERAS
 

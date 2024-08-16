@@ -73,7 +73,7 @@ int main() {
 	skyplane.materials[0].textures[(size_t)wl::texture_slot::Color] = &sky;
 
 
-	wl::time time = {};
+	wl::frame_time time = {};
 	while(!wl::window_should_close(window)) {
 		wl::time_calculations(time);
 

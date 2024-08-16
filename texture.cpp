@@ -82,10 +82,10 @@ WAYLIB_OPTIONAL(image) load_image_from_memory(std::span<std::byte> data) {
 	return load_image_from_memory((unsigned char*)data.data(), data.size());
 }
 
-WAYLIB_OPTIONAL(wl::image) load_images_as_frames(std::span<std::string_view> paths) {
-	std::vector<wl::image> frames;
+WAYLIB_OPTIONAL(image) load_images_as_frames(std::span<std::string_view> paths) {
+	std::vector<image> frames;
 	for(auto& path: paths) {
-		auto res = wl::load_image(wl::cstring_from_view(path.data()));
+		auto res = load_image(cstring_from_view(path.data()));
 		if(!res.has_value) return {};
 		frames.emplace_back(std::move(res.value));
 	}
@@ -94,7 +94,7 @@ WAYLIB_OPTIONAL(wl::image) load_images_as_frames(std::span<std::string_view> pat
 	if(!res.has_value) return {};
 	return res.value;  
 }
-WAYLIB_OPTIONAL(wl::image) load_images_as_frames(const char** _paths, size_t paths_size) {
+WAYLIB_OPTIONAL(image) load_images_as_frames(const char** _paths, size_t paths_size) {
 	std::span<const char*> span{_paths, paths_size};
 	std::vector<std::string_view> paths(span.begin(), span.end());
 	return load_images_as_frames(paths);

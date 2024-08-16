@@ -150,7 +150,7 @@ void window_begin_camera_mode3D(
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= 0
 #endif
-	, WAYLIB_OPTIONAL(time) time
+	, WAYLIB_OPTIONAL(frame_time) frame_time
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
 #endif
@@ -168,7 +168,7 @@ void window_begin_camera_mode2D(
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= 0
 #endif
-	, WAYLIB_OPTIONAL(time) time
+	, WAYLIB_OPTIONAL(frame_time) frame_time
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
 #endif
@@ -185,7 +185,7 @@ void window_begin_camera_mode_identity(
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= 0
 #endif
-	, WAYLIB_OPTIONAL(time) time
+	, WAYLIB_OPTIONAL(frame_time) frame_time
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
 #endif

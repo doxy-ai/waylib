@@ -29,20 +29,20 @@ wgpu::Color to_webgpu(const color& color) {
 	return {color.r, color.g, color.b, color.a};
 }
 
-void time_calculations(time& time) WAYLIB_TRY {
+void time_calculations(frame_time& frame_time) WAYLIB_TRY {
 	constexpr static float alpha = .9;
 	static std::chrono::system_clock::time_point last = std::chrono::system_clock::now();
 
 	auto now = std::chrono::system_clock::now();
-	time.delta = std::chrono::duration_cast<std::chrono::microseconds>(now - last).count() / 1000000.0;
-	time.since_start += time.delta;
+	frame_time.delta = std::chrono::duration_cast<std::chrono::microseconds>(now - last).count() / 1000000.0;
+	frame_time.since_start += frame_time.delta;
 
-	if(std::abs(time.average_delta) < 2 * std::numeric_limits<float>::epsilon()) time.average_delta = time.delta;
-	time.average_delta = time.average_delta * alpha + time.delta * (1 - alpha);
+	if(std::abs(frame_time.average_delta) < 2 * std::numeric_limits<float>::epsilon()) frame_time.average_delta = frame_time.delta;
+	frame_time.average_delta = frame_time.average_delta * alpha + frame_time.delta * (1 - alpha);
 
 	last = now;
 } WAYLIB_CATCH()
-void time_calculations(time* time) { time_calculations(*time); }
+void time_calculations(frame_time* frame_time) { time_calculations(*frame_time); }
 
 bool open_url(const char* url) WAYLIB_TRY {
 	return wl_detail::open_url(url);
@@ -70,7 +70,7 @@ wgpu::Buffer get_zero_buffer(wgpu_state state, size_t size) {
 	return zeroBuffer;
 };
 
-void upload_utility_data(wgpu_frame_state& frame, WAYLIB_OPTIONAL(camera_upload_data&) camera, std::span<light> lights, WAYLIB_OPTIONAL(time) time) WAYLIB_TRY {
+void upload_utility_data(wgpu_frame_state& frame, WAYLIB_OPTIONAL(camera_upload_data&) camera, std::span<light> lights, WAYLIB_OPTIONAL(frame_time) frame_time) WAYLIB_TRY {
 	static WGPUBufferDescriptor cameraBufferDesc = {
 		.label = "Waylib Camera Buffer",
 		.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform,
@@ -85,9 +85,9 @@ void upload_utility_data(wgpu_frame_state& frame, WAYLIB_OPTIONAL(camera_upload_
 	};
 	static WGPUBufferDescriptor timeBufferDesc = {
 		.label = "Waylib Time Buffer",
-		.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform,
-		.size = sizeof(time),
-		.mappedAtCreation = false,
+		.usage = /*wgpu::BufferUsage::CopyDst |*/ wgpu::BufferUsage::Uniform,
+		.size = sizeof(frame_time),
+		.mappedAtCreation = true,
 	};
 
 	static std::array<WGPUBindGroupEntry, 3> bindings = {WGPUBindGroupEntry{
@@ -104,7 +104,7 @@ void upload_utility_data(wgpu_frame_state& frame, WAYLIB_OPTIONAL(camera_upload_
 		.binding = 2,
 		// .buffer = timeBuffer,
 		.offset = 0,
-		.size = sizeof(time)
+		.size = sizeof(frame_time)
 	}};
 	static wgpu::BindGroupDescriptor bindGroupDesc = [&frame] {
 		wgpu::BindGroupDescriptor bindGroupDesc = wgpu::Default;
@@ -131,18 +131,19 @@ void upload_utility_data(wgpu_frame_state& frame, WAYLIB_OPTIONAL(camera_upload_
 		bindings[1].size = sizeof(light);
 	}
 
-	if(time.has_value) {
+	if(frame_time.has_value) {
 		wgpu::Buffer timeBuffer = frame.state.device.createBuffer(timeBufferDesc); WAYLIB_RELEASE_BUFFER_AT_FRAME_END(frame, timeBuffer);
-		frame.state.device.getQueue().writeBuffer(timeBuffer, 0, &time.value, sizeof(time));
+		// frame.state.device.getQueue().writeBuffer(frame_timeBuffer, 0, &frame_time.value, sizeof(frame_time));
+		std::memcpy(timeBuffer.getMappedRange(0, sizeof(frame_time)), &frame_time.value, sizeof(frame_time)); timeBuffer.unmap();
 		bindings[2].buffer = timeBuffer;
-	} else bindings[2].buffer = get_zero_buffer(frame.state, sizeof(time));
+	} else bindings[2].buffer = get_zero_buffer(frame.state, sizeof(frame_time));
 
 	auto bindGroup = frame.state.device.createBindGroup(bindGroupDesc); WAYLIB_RELEASE_AT_FRAME_END(frame, bindGroup);
 	frame.render_pass.setBindGroup(1, bindGroup, 0, nullptr);
 } WAYLIB_CATCH()
-void upload_utility_data(wgpu_frame_state* frame, WAYLIB_OPTIONAL(camera_upload_data*) data, light* lights, size_t light_count, WAYLIB_OPTIONAL(time) time) {
+void upload_utility_data(wgpu_frame_state* frame, WAYLIB_OPTIONAL(camera_upload_data*) data, light* lights, size_t light_count, WAYLIB_OPTIONAL(frame_time) frame_time) {
 	WAYLIB_OPTIONAL(camera_upload_data&) camera = data.has_value ? *data.value : WAYLIB_OPTIONAL(camera_upload_data&){};
-	upload_utility_data(*frame, camera, {lights, light_count}, time);
+	upload_utility_data(*frame, camera, {lights, light_count}, frame_time);
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -741,33 +742,33 @@ mat4x4f camera2D_get_matrix(camera2D& camera, vec2i window_dimensions) {
 }
 mat4x4f camera2D_get_matrix(camera2D* camera, vec2i window_dimensions) { return camera2D_get_matrix(*camera, window_dimensions); }
 
-void begin_camera_mode3D(wgpu_frame_state& frame, camera3D& camera, vec2i window_dimensions, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(time) time /*={}*/) WAYLIB_TRY {
+void begin_camera_mode3D(wgpu_frame_state& frame, camera3D& camera, vec2i window_dimensions, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) WAYLIB_TRY {
 	camera_upload_data data {
 		.is_3D = true,
 		.settings3D = camera,
 		.window_dimensions = window_dimensions,
 	};
 	std::tie(data.get_view_matrix(), data.get_projection_matrix()) = camera3D_get_matrix_impl(camera, window_dimensions);
-	upload_utility_data(frame, data, lights, time);
+	upload_utility_data(frame, data, lights, frame_time);
 } WAYLIB_CATCH()
-void begin_camera_mode3D(wgpu_frame_state* frame, camera3D* camera, vec2i window_dimensions, light* lights /*= nullptr*/, size_t light_count /*=0*/, WAYLIB_OPTIONAL(time) time /*={}*/) {
-	begin_camera_mode3D(*frame, *camera, window_dimensions, {lights, light_count}, time);
+void begin_camera_mode3D(wgpu_frame_state* frame, camera3D* camera, vec2i window_dimensions, light* lights /*= nullptr*/, size_t light_count /*=0*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) {
+	begin_camera_mode3D(*frame, *camera, window_dimensions, {lights, light_count}, frame_time);
 }
 
-void begin_camera_mode2D(wgpu_frame_state& frame, camera2D& camera, vec2i window_dimensions, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(time) time /*={}*/) WAYLIB_TRY {
+void begin_camera_mode2D(wgpu_frame_state& frame, camera2D& camera, vec2i window_dimensions, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) WAYLIB_TRY {
 	camera_upload_data data {
 		.is_3D = true,
 		.settings2D = camera,
 		.window_dimensions = window_dimensions,
 	};
 	std::tie(data.get_view_matrix(), data.get_projection_matrix()) = camera2D_get_matrix_impl(camera, window_dimensions);
-	upload_utility_data(frame, data, lights, time);
+	upload_utility_data(frame, data, lights, frame_time);
 } WAYLIB_CATCH()
-void begin_camera_mode2D(wgpu_frame_state* frame, camera2D* camera, vec2i window_dimensions, light* lights /*= nullptr*/, size_t light_count /*=0*/, WAYLIB_OPTIONAL(time) time /*={}*/) {
-	begin_camera_mode2D(*frame, *camera, window_dimensions, {lights, light_count}, time);
+void begin_camera_mode2D(wgpu_frame_state* frame, camera2D* camera, vec2i window_dimensions, light* lights /*= nullptr*/, size_t light_count /*=0*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) {
+	begin_camera_mode2D(*frame, *camera, window_dimensions, {lights, light_count}, frame_time);
 }
 
-void begin_camera_mode_identity(wgpu_frame_state& frame, vec2i window_dimensions, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(time) time /*={}*/) WAYLIB_TRY {
+void begin_camera_mode_identity(wgpu_frame_state& frame, vec2i window_dimensions, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) WAYLIB_TRY {
 	camera_upload_data data {
 		.is_3D = false,
 		.settings3D = {},
@@ -775,9 +776,9 @@ void begin_camera_mode_identity(wgpu_frame_state& frame, vec2i window_dimensions
 		.window_dimensions = window_dimensions,
 	};
 	data.get_projection_matrix() = data.get_view_matrix() = glm::identity<glm::mat4x4>();
-	upload_utility_data(frame, data, lights, time);
+	upload_utility_data(frame, data, lights, frame_time);
 } WAYLIB_CATCH()
-void begin_camera_mode_identity(wgpu_frame_state* frame, vec2i window_dimensions, light* lights /*= nullptr*/, size_t light_count /*=0*/, WAYLIB_OPTIONAL(time) time /*={}*/) {
+void begin_camera_mode_identity(wgpu_frame_state* frame, vec2i window_dimensions, light* lights /*= nullptr*/, size_t light_count /*=0*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) {
 	begin_camera_mode_identity(*frame, window_dimensions);
 }
 
@@ -897,7 +898,7 @@ void material_upload(wgpu_state state, material& material, material_configuratio
 	wgpu::DepthStencilState depthStencilState = wgpu::Default;
 	// Keep a fragment only if its depth is lower than the previously blended one
 	depthStencilState.depthCompare = config.depth_function.has_value ? config.depth_function.value : wgpu::CompareFunction::Undefined;
-	// Each time a fragment is blended into the target, we update the value of the Z-buffer
+	// Each frame_time a fragment is blended into the target, we update the value of the Z-buffer
 	depthStencilState.depthWriteEnabled = config.depth_function.has_value;
 	// Store the format in a variable as later parts of the code depend on it
 	depthStencilState.format = depth_texture_format;

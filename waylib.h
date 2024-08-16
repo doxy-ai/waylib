@@ -184,7 +184,7 @@ struct texture_config {
 
 
 
-void time_calculations(time* time);
+void time_calculations(frame_time* frame_time);
 
 bool open_url(const char* url);
 
@@ -193,7 +193,7 @@ void upload_utility_data(
 	WAYLIB_OPTIONAL(camera_upload_data*) data, 
 	light* lights, 
 	size_t light_count, 
-	WAYLIB_OPTIONAL(time) time
+	WAYLIB_OPTIONAL(frame_time) frame_time
 );
 
 WAYLIB_C_OR_CPP_TYPE(WGPUDevice, wgpu::Device) create_default_device_from_instance(
@@ -362,7 +362,7 @@ void begin_camera_mode3D(
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= 0
 #endif
-	, WAYLIB_OPTIONAL(time) time
+	, WAYLIB_OPTIONAL(frame_time) frame_time
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
 #endif
@@ -380,7 +380,7 @@ void begin_camera_mode2D(
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= 0
 #endif
-	, WAYLIB_OPTIONAL(time) time
+	, WAYLIB_OPTIONAL(frame_time) frame_time
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
 #endif
@@ -397,7 +397,7 @@ void begin_camera_mode_identity(
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= 0
 #endif
-	, WAYLIB_OPTIONAL(time) time
+	, WAYLIB_OPTIONAL(frame_time) frame_time
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
 #endif

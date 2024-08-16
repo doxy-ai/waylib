@@ -14,6 +14,10 @@
 	#ifndef WAYLIB_DISABLE_DEFAULT_PARAMETERS
 	#define WAYLIB_ENABLE_DEFAULT_PARAMETERS
 	#endif
+
+	#if !defined(WAYLIB_NAMESPACE_NAME) && !defined(WAYLIB_NO_NAMESPACE_NAME)
+	#define WAYLIB_NAMESPACE_NAME wl
+	#endif
 #else
 	#include <stdint.h> // NOTE: Not included on the C++ side since we get wrapped inside a namespace... the c++ side will include the headers itself!
 	#include <stddef.h>

@@ -126,7 +126,7 @@ pipeline_globals& create_pipeline_globals(wgpu_state state) {
 	cameraTimeBindingLayouts[2].binding = 2;
 	cameraTimeBindingLayouts[2].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
 	cameraTimeBindingLayouts[2].buffer.type = wgpu::BufferBindingType::Uniform;
-	cameraTimeBindingLayouts[2].buffer.minBindingSize = sizeof(time);
+	cameraTimeBindingLayouts[2].buffer.minBindingSize = sizeof(frame_time);
 	cameraTimeBindingLayouts[2].buffer.hasDynamicOffset = false;
 
 	// Create a bind group layout

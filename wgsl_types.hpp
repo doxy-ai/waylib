@@ -1,6 +1,8 @@
 #ifndef WAYLIB_WGSL_TYPES_IS_AVAILABLE
 #define WAYLIB_WGSL_TYPES_IS_AVAILABLE
 
+#include "config.h"
+
 #include <cstdint>
 // #define GLM_FORCE_MESSAGES
 #define GLM_FORCE_SWIZZLE
@@ -15,8 +17,6 @@
 #ifdef WAYLIB_NAMESPACE_NAME
 namespace WAYLIB_NAMESPACE_NAME {
 #endif
-
-using namespace glm;
 
 namespace detail {
 	template<size_t Size, typename Type>

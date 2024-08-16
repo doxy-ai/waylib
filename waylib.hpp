@@ -36,13 +36,13 @@ struct shader_preprocessor {
 // wgpu::Color to_webgpu(const color8bit& color);
 wgpu::Color to_webgpu(const color& color);
 
-void time_calculations(time& time);
+void time_calculations(frame_time& frame_time);
 
 void upload_utility_data(
 	wgpu_frame_state& frame, 
 	WAYLIB_OPTIONAL(camera_upload_data&) data,
 	std::span<light> lights, 
-	WAYLIB_OPTIONAL(time) time
+	WAYLIB_OPTIONAL(frame_time) frame_time
 );
 
 void end_drawing(
@@ -68,7 +68,7 @@ void begin_camera_mode3D(
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
 #endif
-	, WAYLIB_OPTIONAL(time) time
+	, WAYLIB_OPTIONAL(frame_time) frame_time
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
 #endif
@@ -82,7 +82,7 @@ void begin_camera_mode2D(
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
 #endif
-	, WAYLIB_OPTIONAL(time) time
+	, WAYLIB_OPTIONAL(frame_time) frame_time
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
 #endif
@@ -95,7 +95,7 @@ void begin_camera_mode_identity(
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
 #endif
-	, WAYLIB_OPTIONAL(time) time
+	, WAYLIB_OPTIONAL(frame_time) frame_time
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
 #endif

@@ -28,22 +28,18 @@ endif()
 
 add_library(waylib waylib.cpp shader_preprocessor.cpp)
 target_link_libraries(waylib PUBLIC waylib_common_bundled)
-target_compile_definitions(waylib PUBLIC WAYLIB_NAMESPACE_NAME=wl)
 
 add_library(waylib_window window.cpp)
 add_library(waylib::window ALIAS waylib_window)
 target_link_libraries(waylib_window PUBLIC glfw glfw3webgpu waylib) # NOTE: Waylib window integrates a bit closer than other modules so links to waylib
-target_compile_definitions(waylib_window PUBLIC WAYLIB_NAMESPACE_NAME=wl)
 
 add_library(waylib_texture texture.cpp thirdparty/miniz.c)
 add_library(waylib::texture ALIAS waylib_texture)
 target_link_libraries(waylib_texture PUBLIC waylib_common_bundled)
-target_compile_definitions(waylib_texture PUBLIC WAYLIB_NAMESPACE_NAME=wl)
 
 add_library(waylib_model model.cpp)
 add_library(waylib::model ALIAS waylib_model)
 target_link_libraries(waylib_model PUBLIC waylib_common_bundled)
-target_compile_definitions(waylib_model PUBLIC WAYLIB_NAMESPACE_NAME=wl)
 
 add_executable(waylib_tests test.cpp)
 target_link_libraries(waylib_tests PUBLIC waylib waylib::window waylib::texture waylib::model)

@@ -417,13 +417,13 @@ typedef struct wgpu_frame_state {
 	template struct optional<wgpu_frame_state>;
 #endif
 
-typedef struct time {
+typedef struct frame_time {
 	float since_start;
 	float delta;
 	float average_delta;
-} time;
+} frame_time;
 #ifdef __cplusplus
-	template struct optional<time>;
+	template struct optional<frame_time>;
 #endif
 
 

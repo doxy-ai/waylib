@@ -43,23 +43,6 @@ struct radian;
 radian deg_to_rad(degree);
 degree rad_to_deg(radian);
 
-float sin(radian);
-float cos(radian);
-float tan(radian);
-radian asin(float);
-radian acos(float);
-radian atan(float);
-radian atan2(float y, float x);
-radian atan_vec(vec2f);
-float sinh(radian);
-float cosh(radian);
-float tanh(radian);
-radian asinh(float);
-radian acosh(float);
-radian atanh(float);
-
-
-
 #ifdef __cplusplus
 } // End extern "C"
 #endif

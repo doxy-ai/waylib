@@ -77,7 +77,7 @@ fn fragment(vert: waylib_output_vertex) -> @location(0) vec4f {
 	skyplane.materials[0].textures[(size_t)wl::texture_slot::Cubemap] = &sky;
 
 
-	wl::time time = {};
+	wl::frame_time time = {};
 	while(!wl::window_should_close(window)) {
 		wl::time_calculations(time);
 

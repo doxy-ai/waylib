@@ -15,7 +15,7 @@ WAYLIB_OPTIONAL(image) load_image_from_memory(
 	const unsigned char* data, size_t size
 );
 
-WAYLIB_OPTIONAL(wl::image) load_images_as_frames(
+WAYLIB_OPTIONAL(image) load_images_as_frames(
 	const char** paths, size_t paths_size
 );
 
