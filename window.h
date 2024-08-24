@@ -6,7 +6,7 @@
 #ifdef __cplusplus
 extern "C" {
 #else
-#include "GLFW/glfw3.h"
+#include <GLFW/glfw3.h>
 #endif
 
 #ifdef __cplusplus
@@ -106,11 +106,13 @@ bool window_should_close(
 #endif
 );
 
+bool window_should_redraw(window* window);
+
 vec2i window_get_dimensions(window* window);
 
 WAYLIB_C_OR_CPP_TYPE(WGPUSurface, wgpu::Surface) window_get_surface(window* window, WGPUInstance instance);
 
-wgpu_state window_get_wgpu_state(window* window, WGPUDevice device);
+wgpu_state window_get_wgpu_state(window* window, wgpu_state partial);
 
 bool window_configure_surface(
 	window* window,
@@ -121,7 +123,7 @@ bool window_configure_surface(
 #endif
 );
 
-void window_automatically_reconfigure_surface_on_resize(
+bool window_automatically_reconfigure_surface_on_resize(
 	window* window,
 	wgpu_state state,
 	surface_configuration config
@@ -130,7 +132,7 @@ void window_automatically_reconfigure_surface_on_resize(
 #endif
 );
 
-wgpu_state create_default_device_from_window(
+wgpu_state create_default_state_from_window(
 	window* window, bool prefer_low_power
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= false

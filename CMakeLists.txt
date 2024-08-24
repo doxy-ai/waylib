@@ -12,19 +12,30 @@ endif()
 include(cmake/bundle.cmake)
 
 add_subdirectory(thirdparty/WebGPU-distribution)
+if(EMSCRIPTEN)
+	add_library(glfw INTERFACE)
+	target_link_options(glfw INTERFACE -sUSE_GLFW=3)
+endif()
 set(GLM_ENABLE_CXX_20 ON CACHE BOOL "Enable C++ 20")
 set(GLM_ENABLE_LANG_EXTENSIONS ON CACHE BOOL "Enable language extensions")
 add_subdirectory(thirdparty/glm)
 add_subdirectory(thirdparty/glfw3webgpu)
 
+
 add_library(waylib_common common.cpp math.cpp)
 target_link_libraries(waylib_common PUBLIC webgpu glm::glm)
 target_compile_definitions(waylib_common PUBLIC WAYLIB_NAMESPACE_NAME=wl)
-if(MSVC)
+if(EMSCRIPTEN)
+	target_link_options(waylib_common PUBLIC
+		-sASYNCIFY # Required by WebGPU-C++
+	)
+endif()
+if(MSVC OR EMSCRIPTEN)
 	add_library(waylib_common_bundled ALIAS waylib_common)
 else()
 	bundle_static_library(waylib_common waylib_common_bundled)
 endif()
+
 
 add_library(waylib waylib.cpp shader_preprocessor.cpp)
 target_link_libraries(waylib PUBLIC waylib_common_bundled)
@@ -43,3 +54,14 @@ target_link_libraries(waylib_model PUBLIC waylib_common_bundled)
 
 add_executable(waylib_tests test.cpp)
 target_link_libraries(waylib_tests PUBLIC waylib waylib::window waylib::texture waylib::model)
+add_custom_command(TARGET waylib_tests POST_BUILD
+   COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/resources ${CMAKE_CURRENT_BINARY_DIR}/resources DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/resources)
+
+if(EMSCRIPTEN)
+	set_target_properties(waylib_tests PROPERTIES SUFFIX ".html")
+	target_link_options(waylib_tests PUBLIC
+		-fexceptions
+		-sALLOW_MEMORY_GROWTH
+		--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/resources@resources
+	)
+endif()

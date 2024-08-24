@@ -93,6 +93,12 @@ bool window_should_close(window* window, bool should_poll_events /*= true*/) {
 	return glfwWindowShouldClose(window);
 }
 
+bool window_should_redraw(window* window) {
+	if(!glfwGetWindowAttrib(window, GLFW_VISIBLE)) return false;
+	if(glfwGetWindowAttrib(window, GLFW_ICONIFIED)) return false;
+	return true;
+}
+
 vec2i window_get_dimensions(window* window) {
 	vec2i out;
 	glfwGetWindowSize(window, &out.x, &out.y);
@@ -102,13 +108,13 @@ vec2i window_get_dimensions(window* window) {
 wgpu::Surface window_get_surface(window* window, WGPUInstance instance) {
 	return glfwGetWGPUSurface(instance, window);
 }
-wgpu::Surface window_get_surface(window* window, wgpu::Device device) {
-	return glfwGetWGPUSurface(device.getAdapter().getInstance(), window);
-}
+// wgpu::Surface window_get_surface(window* window, wgpu::Device device) {
+// 	return glfwGetWGPUSurface(device.getAdapter().getInstance(), window);
+// }
 
-wgpu_state window_get_wgpu_state(window* window, WGPUDevice _device) {
-	wgpu::Device& device = WAYLIB_C_TO_CPP_CONVERSION(wgpu::Device, _device);
-	return {device, window_get_surface(window, device)};
+wgpu_state window_get_wgpu_state(window* window, wgpu_state partial) {
+	partial.surface = window_get_surface(window, partial.instance);
+	return partial;
 }
 
 bool window_configure_surface(
@@ -118,7 +124,7 @@ bool window_configure_surface(
 	return configure_surface(state, window_get_dimensions(window), config);
 }
 
-void window_automatically_reconfigure_surface_on_resize(
+bool window_automatically_reconfigure_surface_on_resize(
 	window* window, wgpu_state state,
 	surface_configuration config /*= {}*/
 ) {
@@ -128,7 +134,8 @@ void window_automatically_reconfigure_surface_on_resize(
 		surface_configuration config;
 	};
 
-	if(config.automatic_should_configure_now) window_configure_surface(window, state, config);
+	bool res = true;
+	if(config.automatic_should_configure_now) res = window_configure_surface(window, state, config);
 
 	if(auto data = (ResizeData*)glfwGetWindowUserPointer(window); data && std::string_view(data->magic) == "ReDa")
 		delete data;
@@ -139,15 +146,13 @@ void window_automatically_reconfigure_surface_on_resize(
 		if(data && std::string_view(data->magic) == "ReDa")
 			configure_surface(data->state, vec2i{width, height}, data->config);
 	});
+	return res;
 }
 
-wgpu_state create_default_device_from_window(window* window, bool prefer_low_power /*= false*/) {
+wgpu_state create_default_state_from_window(window* window, bool prefer_low_power /*= false*/) {
 	WGPUInstance instance = wgpuCreateInstance({});
 	wgpu::Surface surface = window_get_surface(window, instance);
-	return {
-		.device = create_default_device_from_instance(instance, surface, prefer_low_power),
-		.surface = surface
-	};
+	return create_default_state_from_instance(instance, surface, prefer_low_power);
 }
 
 #ifndef WAYLIB_NO_CAMERAS

@@ -33,6 +33,8 @@
     #define NOMINMAX
     #include <windows.h>
     #include <shellapi.h>
+#elif __EMSCRIPTEN__
+    #include <emscripten.h>
 #else
     #include <cstdlib>
 #endif
@@ -49,6 +51,12 @@ inline bool open_url(std::string_view url) {
     return system(("open " + std::string(url)).c_str()) != -1;
 #elif __linux__
     return system(("xdg-open " + std::string(url)).c_str()) != -1;
+#elif __EMSCRIPTEN__
+    EM_ASM({
+        var url = UTF8ToString($0);
+        window.open(url, "_blank");
+    }, std::string(url).c_str());
+    return true;
 #else
     #error "Unsupported Platform"
 #endif

@@ -2,6 +2,41 @@
 #define WAYLIB_IS_AVAILABLE
 #include "common.h"
 
+#ifdef __EMSCRIPTEN__
+	namespace detail_ {
+		template<typename F>
+		auto closure_to_function_pointer(F _f) {
+			static F f = _f;
+			return +[]{ f(); };
+		}
+	}
+
+	#define WAYLIB_MAIN_LOOP_CONTINUE return
+	#define WAYLIB_MAIN_LOOP_BREAK emscripten_cancel_main_loop()
+	#ifdef WAYLIB_NAMESPACE_NAME
+		#define WAYLIB_MAIN_LOOP(continue_expression, body)\
+			auto callback = [&]() {\
+				if(!(continue_expression)) WAYLIB_MAIN_LOOP_BREAK;\
+				body\
+			};\
+			emscripten_set_main_loop(WAYLIB_NAMESPACE_NAME::detail_::closure_to_function_pointer(callback), 0, true);
+	#else // !WAYLIB_NAMESPACE_NAME
+		#define WAYLIB_MAIN_LOOP(continue_expression, body)\
+			auto callback = [&]() {\
+				if(!(continue_expression)) WAYLIB_MAIN_LOOP_BREAK;\
+				body\
+			};\
+			emscripten_set_main_loop(detail_::closure_to_function_pointer(callback), 0, true);
+	#endif // WAYLIB_NAMESPACE_NAME
+#else // !__EMSCRIPTEN__
+	#define WAYLIB_MAIN_LOOP(continue_expression, body)\
+		while(continue_expression) {\
+			body\
+		}
+	#define WAYLIB_MAIN_LOOP_CONTINUE continue
+	#define WAYLIB_MAIN_LOOP_BREAK break
+#endif // __EMSCRIPTEN__
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -196,7 +231,7 @@ void upload_utility_data(
 	WAYLIB_OPTIONAL(frame_time) frame_time
 );
 
-WAYLIB_C_OR_CPP_TYPE(WGPUDevice, wgpu::Device) create_default_device_from_instance(
+wgpu_state create_default_state_from_instance(
 	WGPUInstance instance,
 	WGPUSurface surface
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
@@ -208,7 +243,7 @@ WAYLIB_C_OR_CPP_TYPE(WGPUDevice, wgpu::Device) create_default_device_from_instan
 #endif
 );
 
-WAYLIB_C_OR_CPP_TYPE(WGPUDevice, wgpu::Device) create_default_device(
+wgpu_state create_default_state(
 	WGPUSurface surface
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= nullptr
@@ -219,20 +254,16 @@ WAYLIB_C_OR_CPP_TYPE(WGPUDevice, wgpu::Device) create_default_device(
 #endif
 );
 
-void release_device(
-	WGPUDevice device,
-	bool also_release_adapter
-#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
-		= true
-#endif
-	, bool also_release_instance
-#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
-		= true
-#endif
-);
-
 void release_wgpu_state(
-	wgpu_state state
+	wgpu_state state,
+	bool release_adapter
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
+	, bool release_instance
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
 );
 
 bool configure_surface(
@@ -336,6 +367,10 @@ WAYLIB_OPTIONAL(wgpu_frame_state) begin_drawing(
 );
 
 void end_drawing(
+	wgpu_frame_state* frame
+);
+
+void present_frame(
 	wgpu_frame_state* frame
 );
 

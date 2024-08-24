@@ -1,5 +1,10 @@
 #pragma once
-#include <webgpu/webgpu.hpp>
+#ifdef __EMSCRIPTEN__
+	// #include <webgpu/webgpu.h>
+	#include "thirdparty/WebGPU-distribution/include-emscripten/webgpu/webgpu.hpp"
+#else
+	#include <webgpu/webgpu.hpp>
+#endif
 
 #include "math.hpp"
 

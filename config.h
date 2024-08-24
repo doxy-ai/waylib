@@ -1,6 +1,6 @@
 #pragma once
 
-#ifdef _MSC_VER 
+#ifdef _MSC_VER
 #pragma warning (push)
 #pragma warning (disable : 4190) // Disable warning about incompatible C linkage
 #define NOMINMAX
@@ -22,6 +22,10 @@
 	#include <stdint.h> // NOTE: Not included on the C++ side since we get wrapped inside a namespace... the c++ side will include the headers itself!
 	#include <stddef.h>
 	#include <webgpu/webgpu.h>
+#endif
+
+#ifdef __EMSCRIPTEN__
+	#include <emscripten.h>
 #endif
 
 

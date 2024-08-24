@@ -30,11 +30,13 @@ fn fragment(vert: waylib_output_vertex) -> @location(0) vec4f {
 
 int main() {
 	auto window = wl::create_window(800, 600, "waylib");
-	auto state = wl::create_default_device_from_window(window);
-	wl::window_automatically_reconfigure_surface_on_resize(window, state);
+	auto state = wl::create_default_state_from_window(window);
+	// Attempt to use mailbox present mode (the default) but fall back to immediate mode if not available (and fifo if nothing is available!)
+	if(!wl::window_automatically_reconfigure_surface_on_resize(window, state))
+		wl::window_automatically_reconfigure_surface_on_resize(window, state, {.presentation_mode = wgpu::PresentMode::Immediate});
 
 	// Load the shader module
-	wl::model model = wl::throw_if_null(wl::load_obj_model("../suzane.obj", state));
+	wl::model model = wl::throw_if_null(wl::load_obj_model("resources/suzane_highpoly.obj", state));
 	wl::shader_preprocessor* p = wl::preprocessor_initialize_virtual_filesystem(wl::create_shader_preprocessor(), state);
 	wl::shader shader = wl::throw_if_null(wl::create_shader(
 		state, shaderSource,
@@ -83,10 +85,12 @@ fn fragment(vert: waylib_output_vertex) -> @location(0) vec4f {
 
 
 	wl::frame_time time = {};
-	while(!wl::window_should_close(window)) {
+	WAYLIB_MAIN_LOOP(!wl::window_should_close(window), {
 		wl::time_calculations(time);
 
 		camera.position = wl::vec3f(2 * std::cos(time.since_start), std::sin(time.since_start / 4), 2 * std::sin(time.since_start));
+
+		if(!wl::window_should_redraw(window)) WAYLIB_MAIN_LOOP_CONTINUE;
 
 		auto frame = wl::throw_if_null(
 			wl::begin_drawing(state, wl::color{0.9, .1,  0.2, 1})
@@ -101,7 +105,9 @@ fn fragment(vert: waylib_output_vertex) -> @location(0) vec4f {
 			wl::end_camera_mode(frame);
 		}
 		wl::end_drawing(frame);
-	}
+
+		wl::present_frame(frame);
+	});
 
 	wl::release_shader_preprocessor(p);
 	wl::release_wgpu_state(state);

@@ -42,7 +42,7 @@ fn fragment(vert: waylib_output_vertex) -> @location(0) vec4f {
 
 int main() {
 	auto window = wl::create_window(800, 600, "waylib");
-	auto state = wl::create_default_device_from_window(window);
+	auto state = wl::create_default_state_from_window(window);
 	wl::window_automatically_reconfigure_surface_on_resize(window, state);
 
 	// Load the shader module

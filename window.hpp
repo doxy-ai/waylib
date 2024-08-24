@@ -4,8 +4,6 @@
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 
-#include <webgpu/webgpu.hpp>
-
 #ifdef WAYLIB_NAMESPACE_NAME
 namespace WAYLIB_NAMESPACE_NAME {
 #endif
@@ -24,10 +22,10 @@ window* create_window(
 #endif
 );
 
-wgpu::Surface window_get_surface(
-	window* window,
-	wgpu::Device webgpu
-);
+// wgpu::Surface window_get_surface(
+// 	window* window,
+// 	wgpu::Device webgpu
+// );
 
 #ifndef WAYLIB_NO_CAMERAS
 void window_begin_camera_mode3D(

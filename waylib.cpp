@@ -173,11 +173,11 @@ wgpu::IndexFormat calculate_index_format() {
 
 wgpu::TextureFormat surface_preferred_format(wgpu_state state) {
 	wgpu::SurfaceCapabilities capabilities;
-	state.surface.getCapabilities(state.device.getAdapter(), &capabilities); // TODO: Always returns error?
+	state.surface.getCapabilities(state.adapter, &capabilities); // TODO: Always returns error?
 	return capabilities.formats[0];
 }
 
-wgpu::Device create_default_device_from_instance(WGPUInstance instance, WGPUSurface surface /*= nullptr*/, bool prefer_low_power /*= false*/) WAYLIB_TRY {
+wgpu_state create_default_state_from_instance(WGPUInstance instance, WGPUSurface surface /*= nullptr*/, bool prefer_low_power /*= false*/) WAYLIB_TRY {
 	wgpu::RequestAdapterOptions adapterOpts = {};
 	adapterOpts.compatibleSurface = surface;
 	adapterOpts.powerPreference = prefer_low_power ? wgpu::PowerPreference::LowPower : wgpu::PowerPreference::HighPerformance;
@@ -193,6 +193,7 @@ wgpu::Device create_default_device_from_instance(WGPUInstance instance, WGPUSurf
 	deviceDesc.requiredLimits = nullptr;
 	deviceDesc.defaultQueue.nextInChain = nullptr;
 	deviceDesc.defaultQueue.label = "Waylib Queue";
+#ifndef __EMSCRIPTEN__
 	deviceDesc.deviceLostCallbackInfo.callback = [](WGPUDevice const* device, WGPUDeviceLostReason reason, char const* message, void* userdata) {
 		std::cerr << "[WAYLIB] Device " << wgpu::Device{*device} << " lost: reason " << wgpu::DeviceLostReason{reason};
 		if (message) std::cerr << " (" << message << ")";
@@ -203,33 +204,34 @@ wgpu::Device create_default_device_from_instance(WGPUInstance instance, WGPUSurf
 		if (message) std::cerr << " (" << message << ")";
 		std::cerr << std::endl;
 	};
-	return adapter.requestDevice(deviceDesc);
-} WAYLIB_CATCH(nullptr)
+#endif
+	return {
+		.instance = instance,
+		.adapter = adapter,
+		.device = adapter.requestDevice(deviceDesc),
+		.surface = surface
+	};
+} WAYLIB_CATCH({})
 
-wgpu::Device create_default_device(WGPUSurface surface /*= nullptr*/, bool prefer_low_power /*= false*/) WAYLIB_TRY {
-	return create_default_device_from_instance(wgpuCreateInstance({}), surface, prefer_low_power);
-} WAYLIB_CATCH(nullptr)
+wgpu_state create_default_state(WGPUSurface surface /*= nullptr*/, bool prefer_low_power /*= false*/) WAYLIB_TRY {
+	return create_default_state_from_instance(wgpuCreateInstance({}), surface, prefer_low_power);
+} WAYLIB_CATCH({})
 
-void release_device(WGPUDevice device, bool also_release_adapter /*= true*/, bool also_release_instance /*= true*/) WAYLIB_TRY {
-	wgpu::Adapter adapter = WAYLIB_C_TO_CPP_CONVERSION(wgpu::Device, device).getAdapter();
-	wgpu::Instance instance = adapter.getInstance();
-	wgpuDeviceRelease(device);
-	if(also_release_adapter) wgpuAdapterRelease(adapter);
-	if(also_release_instance) wgpuInstanceRelease(instance);
-} WAYLIB_CATCH()
-
-void release_wgpu_state(wgpu_state state) WAYLIB_TRY {
+void release_wgpu_state(wgpu_state state, bool release_adapter /*= true*/, bool release_instance /*= true*/) WAYLIB_TRY {
 	state.device.getQueue().release();
 	state.surface.release();
-	release_device(state.device, true, true);
+	state.device.release();
+	if(release_adapter) state.adapter.release();
+	if(release_instance) state.instance.release();
 } WAYLIB_CATCH()
 
+// Returns true if the request present_mode is supported... returns false if we fall back fifo (can be confirmed its not just a memory allocation failure by making sure the first word of the error message is "desired")
 bool configure_surface(wgpu_state state, vec2i size, surface_configuration config /*= {}*/) WAYLIB_TRY {
 	// Configure the surface
 	wgpu::SurfaceConfiguration descriptor = {};
 
 	wgpu::SurfaceCapabilities capabilities;
-	state.surface.getCapabilities(state.device.getAdapter(), &capabilities); // TODO: Always returns error?
+	state.surface.getCapabilities(state.adapter, &capabilities); // TODO: Always returns error?
 
 	bool found = false;
 	for(size_t i = 0; i < capabilities.presentModeCount; ++i)
@@ -256,7 +258,7 @@ bool configure_surface(wgpu_state state, vec2i size, surface_configuration confi
 	descriptor.alphaMode = config.alpha_mode;
 
 	state.surface.configure(descriptor);
-	return true;
+	return found;
 } WAYLIB_CATCH(false)
 
 //////////////////////////////////////////////////////////////////////
@@ -324,7 +326,7 @@ bool preprocessor_add_search_path(shader_preprocessor* processor, const char* _p
 } WAYLIB_CATCH(false)
 
 shader_preprocessor* preprocessor_initialize_platform_defines(shader_preprocessor* processor, wgpu_state state) WAYLIB_TRY {
-	detail::preprocessor_initialize_platform_defines(processor, state.device.getAdapter());
+	detail::preprocessor_initialize_platform_defines(processor, state.adapter);
 	return processor;
 } WAYLIB_CATCH(nullptr)
 
@@ -690,7 +692,10 @@ void end_drawing(wgpu_frame_state& frame) WAYLIB_TRY {
 	frame.state.device.getQueue().submit(1, &command);
 	command.release();
 	// std::cout << "Command submitted." << std::endl;
+} WAYLIB_CATCH()
+void end_drawing(wgpu_frame_state* frame) { end_drawing(*frame); }
 
+void present_frame(wgpu_frame_state& frame) WAYLIB_TRY {
 #ifndef __EMSCRIPTEN__
 	frame.state.surface.present();
 #endif
@@ -703,6 +708,7 @@ void end_drawing(wgpu_frame_state& frame) WAYLIB_TRY {
 	// Process callbacks
 	process_wgpu_events(frame.state.device);
 } WAYLIB_CATCH()
+void present_frame(wgpu_frame_state* frame) { present_frame(*frame); }
 
 //////////////////////////////////////////////////////////////////////
 // #Camera

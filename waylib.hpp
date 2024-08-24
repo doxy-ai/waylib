@@ -49,6 +49,10 @@ void end_drawing(
 	wgpu_frame_state& frame
 );
 
+void present_frame(
+	wgpu_frame_state& frame
+);
+
 #ifndef WAYLIB_NO_CAMERAS
 mat4x4f camera3D_get_matrix(
 	camera3D& camera,

@@ -395,6 +395,8 @@ typedef camera3D camera;	// By default a camera is a 3D camera
 
 // Struct holding all of the state needed by webgpu functions
 typedef struct wgpu_state {
+	WAYLIB_C_OR_CPP_TYPE(WGPUInstance, wgpu::Instance) instance;
+	WAYLIB_C_OR_CPP_TYPE(WGPUAdapter, wgpu::Adapter) adapter;
 	WAYLIB_C_OR_CPP_TYPE(WGPUDevice, wgpu::Device) device;
 	WAYLIB_C_OR_CPP_TYPE(WGPUSurface, wgpu::Surface) surface;
 } wgpu_state;
