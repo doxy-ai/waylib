@@ -195,10 +195,10 @@ typedef struct mesh {
 	index_t* indices;          // Vertex indices (in case vertex data comes indexed)
 
 	// Animation vertex data
-	vec3f* anim_vertices;      // Animated vertex positions (after bones transformations)
-	vec3f* anim_normals;       // Animated normals (after bones transformations)
-	unsigned char* bone_ids;   // Vertex bone ids, max 255 bone ids, up to 4 bones influence by vertex (skinning)
-	vec4f* bone_weights;       // Vertex bone weight, up to 4 bones influence by vertex (skinning)
+	// vec3f* anim_vertices;      // Animated vertex positions (after bones transformations)
+	// vec3f* anim_normals;       // Animated normals (after bones transformations)
+	vec4u* bone_ids;			// Vertex bone ids, max 255 bone ids, up to 4 bones influence by vertex (skinning)
+	vec4f* bone_weights;		// Vertex bone weight, up to 4 bones influence by vertex (skinning)
 	bool heap_allocated // Wether or not this mesh is stored on the heap and should be automatically cleaned up
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= false
@@ -254,6 +254,9 @@ typedef struct model {
 			return meshID;
 		return mesh_materials[meshID];
 	}
+
+	inline std::span<mesh> get_meshes() { return {meshes, mesh_count}; }
+	inline std::span<material> get_materials() { return {materials, material_count}; }
 #endif
 } model;
 #ifdef __cplusplus

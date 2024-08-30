@@ -348,6 +348,10 @@ WAYLIB_OPTIONAL(shader) create_shader(
 #endif
 );
 
+void release_shader(
+	shader* shader
+);
+
 WAYLIB_OPTIONAL(wgpu_frame_state) begin_drawing_render_texture(
 	wgpu_state state,
 	WGPUTextureView render_texture,
@@ -448,6 +452,10 @@ void mesh_upload(
 	mesh* mesh
 );
 
+void release_mesh(
+	mesh* mesh
+);
+
 void material_upload(
 	wgpu_state state,
 	material* material,
@@ -467,11 +475,43 @@ material create_material(
 #endif
 );
 
+void release_material(
+	material* material,
+	bool release_textures
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
+	, bool release_shaders
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
+);
+
 model_process_configuration default_model_process_configuration();
 
 void model_upload(
 	wgpu_state state,
 	model* model
+);
+
+void release_model(
+	model* model,
+	bool release_meshes
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
+	, bool release_materials
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
+	, bool release_textures
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
+	, bool release_shaders
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
 );
 
 void model_draw_instanced(
@@ -509,6 +549,14 @@ WAYLIB_OPTIONAL(texture) create_texture_from_image(
 #endif
 WAYLIB_OPTIONAL(const texture*) get_default_texture(wgpu_state state);
 WAYLIB_OPTIONAL(const texture*) get_default_cube_texture(wgpu_state state);
+
+void release_image(
+	image* image
+);
+
+void release_texture(
+	texture* texture
+);
 
 #ifdef __cplusplus
 } // End extern "C"

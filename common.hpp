@@ -7,6 +7,7 @@
 #endif
 
 #include "math.hpp"
+#include "thirdparty/defer.hpp"
 
 #include <cstdint>
 #include <cstddef>
@@ -74,8 +75,15 @@ union image_data_span {
 
 // TODO: Is there an alternative to std::function we can use?
 struct wgpu_frame_finalizers: public std::vector<std::function<void()>> { using std::vector<std::function<void()>>::vector; };
-#define WAYLIB_RELEASE_AT_FRAME_END(frame, variable) frame.finalizers->emplace_back([variable]() mutable { variable.release(); })
-#define WAYLIB_RELEASE_BUFFER_AT_FRAME_END(frame, buffer) frame.finalizers->emplace_back([buffer]() mutable { buffer.destroy(); buffer.release(); })
+namespace detail {
+	struct ___frame_defer_dummy___ { wgpu_frame_finalizers* finalizers; };
+	template <std::invocable F> auto operator<<(___frame_defer_dummy___ d, F f) { return d.finalizers->emplace_back(f); }
+}
+#ifdef WAYLIB_NAMESPACE_NAME
+	#define frame_defer(frame) auto DEFER_2(__LINE__) = WAYLIB_NAMESPACE_NAME::detail::___frame_defer_dummy___{frame.finalizers} << [=]() mutable
+#else
+	#define frame_defer(frame) auto DEFER_2(__LINE__) = detail::___frame_defer_dummy___{frame.finalizers} << [=]() mutable
+#endif
 
 
 
@@ -114,8 +122,8 @@ std::string get_error_message_and_clear();
 void set_error_message(const std::string_view view);
 void set_error_message(const std::string& str);
 
-// Creates a c-string from a string view 
-// (if the string view doesn't point to a valid cstring a temporary one that 
+// Creates a c-string from a string view
+// (if the string view doesn't point to a valid cstring a temporary one that
 //		is only valid until the next time this function is called is created)
 template<size_t uniqueID = 0>
 inline const char* cstring_from_view(const std::string_view view) {
@@ -132,8 +140,8 @@ color8 convert(const color& c);
 pipeline_globals& create_pipeline_globals(wgpu_state state);
 
 WAYLIB_NULLABLE(image_data_span<>) image_get_frame(
-	image& image, 
-	size_t frame, 
+	image& image,
+	size_t frame,
 	size_t mip_level
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= 0
@@ -141,7 +149,7 @@ WAYLIB_NULLABLE(image_data_span<>) image_get_frame(
 );
 
 WAYLIB_OPTIONAL(image) merge_images(
-	std::span<image> images, 
+	std::span<image> images,
 	bool free_incoming
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= true

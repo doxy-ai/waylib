@@ -123,8 +123,16 @@ void light_upload(
 // );
 #endif // WAYLIB_NO_LIGHTS
 
+void release_shader(
+	shader& shader
+);
+
 void mesh_upload(
 	wgpu_state state,
+	mesh& mesh
+);
+
+void release_mesh(
 	mesh& mesh
 );
 
@@ -134,6 +142,18 @@ void material_upload(
 	material_configuration config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
+#endif
+);
+
+void release_material(
+	material& material,
+	bool release_textures
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
+	, bool release_shaders
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
 #endif
 );
 
@@ -157,6 +177,26 @@ material create_material(
 void model_upload(
 	wgpu_state state,
 	model& model
+);
+
+void release_model(
+	model& model,
+	bool release_meshes
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
+	, bool release_materials
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
+	, bool release_textures
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
+	, bool release_shaders
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
 );
 
 WAYLIB_OPTIONAL(model) load_model_from_memory(
@@ -195,6 +235,14 @@ WAYLIB_OPTIONAL(texture) create_texture_from_image(
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
 #endif
+);
+
+void release_image(
+	image& image
+);
+
+void release_texture(
+	texture& texture
 );
 
 #ifdef WAYLIB_NAMESPACE_NAME

@@ -29,15 +29,16 @@ fn fragment(vert: waylib_output_vertex) -> @location(0) vec4f {
 })";
 
 int main() {
-	auto window = wl::create_window(800, 600, "waylib");
-	auto state = wl::create_default_state_from_window(window);
+	auto window = wl::create_window(800, 600, "waylib"); defer { wl::release_window(window); };
+	auto state = wl::create_default_state_from_window(window); defer { wl::release_wgpu_state(state); };
 	// Attempt to use mailbox present mode (the default) but fall back to immediate mode if not available (and fifo if nothing is available!)
 	if(!wl::window_automatically_reconfigure_surface_on_resize(window, state))
 		wl::window_automatically_reconfigure_surface_on_resize(window, state, {.presentation_mode = wgpu::PresentMode::Immediate});
 
 	// Load the shader module
-	wl::model model = wl::throw_if_null(wl::load_obj_model("resources/suzane_highpoly.obj", state));
+	wl::model model = wl::throw_if_null(wl::load_obj_model("resources/suzane_highpoly.obj", state)); defer { wl::release_model(model); };
 	wl::shader_preprocessor* p = wl::preprocessor_initialize_virtual_filesystem(wl::create_shader_preprocessor(), state);
+	defer { wl::release_shader_preprocessor(p); };
 	wl::shader shader = wl::throw_if_null(wl::create_shader(
 		state, shaderSource,
 		{.vertex_entry_point = "waylib_default_vertex_shader", .fragment_entry_point = "fragment", .name = "Default Shader", .preprocessor = p}
@@ -70,9 +71,9 @@ fn fragment(vert: waylib_output_vertex) -> @location(0) vec4f {
 	// Sample the cubemap (direction defines how it should be sampled!)
 	return waylib_sample_cubemap(direction);
 })";
-	wl::model skyplane = wl::throw_if_null(wl::create_fullscreen_quad(state, 
+	wl::model skyplane = wl::throw_if_null(wl::create_fullscreen_quad(state,
 		wl::create_shader(state, skyplaneShaderSource, {.fragment_entry_point = "fragment", .preprocessor = p})
-	, p));
+	, p)); defer { wl::release_model(model); };
 	// From: https://learnopengl.com/Advanced-OpenGL/Cubemaps
 	auto cubemapPaths = std::array<std::string_view, 6>{
 		"../skybox/right.jpg", "../skybox/left.jpg",
@@ -108,8 +109,4 @@ fn fragment(vert: waylib_output_vertex) -> @location(0) vec4f {
 
 		wl::present_frame(frame);
 	});
-
-	wl::release_shader_preprocessor(p);
-	wl::release_wgpu_state(state);
-	wl::release_window(window);
 }

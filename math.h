@@ -24,6 +24,9 @@ typedef struct vec2f {
 typedef struct vec3f {
 	float x, y, z;
 } vec3f;
+typedef struct vec4u {
+	float x, y, z, w;
+} vec4f;
 typedef struct vec4f {
 	float x, y, z, w;
 } vec4f;
@@ -34,6 +37,7 @@ typedef float radian;
 struct vec2i;
 struct vec2f;
 struct vec3f;
+struct vec4u;
 struct vec4f;
 struct mat4x4f;
 struct degree;

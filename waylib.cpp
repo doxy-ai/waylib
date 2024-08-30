@@ -1,5 +1,6 @@
 #include "waylib.hpp"
 #include "common.h"
+#include "common.hpp"
 #include "config.h"
 #include "waylib.h"
 
@@ -115,14 +116,14 @@ void upload_utility_data(wgpu_frame_state& frame, WAYLIB_OPTIONAL(camera_upload_
 	}();
 
 	if(camera.has_value) {
-		wgpu::Buffer cameraBuffer = frame.state.device.createBuffer(cameraBufferDesc); WAYLIB_RELEASE_BUFFER_AT_FRAME_END(frame, cameraBuffer);
+		wgpu::Buffer cameraBuffer = frame.state.device.createBuffer(cameraBufferDesc); frame_defer(frame) { cameraBuffer.destroy(); cameraBuffer.release(); };
 		frame.state.device.getQueue().writeBuffer(cameraBuffer, 0, &camera.value, sizeof(camera_upload_data));
 		bindings[0].buffer = cameraBuffer;
 	} else bindings[0].buffer = get_zero_buffer(frame.state, sizeof(camera_upload_data));
 
 	if(!lights.empty()) {
 		lightBufferDesc.size = sizeof(light) * lights.size();
-		wgpu::Buffer lightBuffer = frame.state.device.createBuffer(lightBufferDesc); WAYLIB_RELEASE_BUFFER_AT_FRAME_END(frame, lightBuffer);
+		wgpu::Buffer lightBuffer = frame.state.device.createBuffer(lightBufferDesc); frame_defer(frame) { lightBuffer.destroy(); lightBuffer.release(); };
 		frame.state.device.getQueue().writeBuffer(lightBuffer, 0, lights.data(), lightBufferDesc.size);
 		bindings[1].buffer = lightBuffer;
 		bindings[1].size = lightBufferDesc.size;
@@ -132,13 +133,13 @@ void upload_utility_data(wgpu_frame_state& frame, WAYLIB_OPTIONAL(camera_upload_
 	}
 
 	if(frame_time.has_value) {
-		wgpu::Buffer timeBuffer = frame.state.device.createBuffer(timeBufferDesc); WAYLIB_RELEASE_BUFFER_AT_FRAME_END(frame, timeBuffer);
+		wgpu::Buffer timeBuffer = frame.state.device.createBuffer(timeBufferDesc); frame_defer(frame) { timeBuffer.destroy(); timeBuffer.release(); };
 		// frame.state.device.getQueue().writeBuffer(frame_timeBuffer, 0, &frame_time.value, sizeof(frame_time));
 		std::memcpy(timeBuffer.getMappedRange(0, sizeof(frame_time)), &frame_time.value, sizeof(frame_time)); timeBuffer.unmap();
 		bindings[2].buffer = timeBuffer;
 	} else bindings[2].buffer = get_zero_buffer(frame.state, sizeof(frame_time));
 
-	auto bindGroup = frame.state.device.createBindGroup(bindGroupDesc); WAYLIB_RELEASE_AT_FRAME_END(frame, bindGroup);
+	auto bindGroup = frame.state.device.createBindGroup(bindGroupDesc); frame_defer(frame) { bindGroup.release(); };
 	frame.render_pass.setBindGroup(1, bindGroup, 0, nullptr);
 } WAYLIB_CATCH()
 void upload_utility_data(wgpu_frame_state* frame, WAYLIB_OPTIONAL(camera_upload_data*) data, light* lights, size_t light_count, WAYLIB_OPTIONAL(frame_time) frame_time) {
@@ -385,6 +386,12 @@ WAYLIB_OPTIONAL(shader) create_shader(wgpu_state state, const char* wgsl_source_
 		.module = state.device.createShaderModule(shaderDesc)
 	}};
 } WAYLIB_CATCH({})
+
+void release_shader(shader& shader) {
+	shader.module.release();
+	// TODO: How do we handle entry points?
+}
+void release_shader(shader* shader) { release_shader(*shader); }
 
 namespace detail{
 	std::pair<wgpu::RenderPipelineDescriptor, WAYLIB_OPTIONAL(wgpu::FragmentState)> shader_configure_render_pipeline_descriptor(wgpu_state state, shader& shader, wgpu::RenderPipelineDescriptor pipelineDesc = {}) {
@@ -864,6 +871,23 @@ void mesh_upload(wgpu_state state, mesh* mesh) {
 	mesh_upload(state, *mesh);
 }
 
+void release_mesh(mesh& mesh) {
+	if(mesh.heap_allocated) {
+		if(mesh.positions) delete mesh.positions;
+		if(mesh.uvs) delete mesh.uvs;
+		if(mesh.uvs2) delete mesh.uvs2;
+		if(mesh.normals) delete mesh.normals;
+		if(mesh.tangents) delete mesh.tangents;
+		// if(mesh.bitangents) delete mesh.bitangents;
+		if(mesh.colors) delete mesh.colors;
+		if(mesh.indices) delete mesh.indices;
+	}
+	mesh.buffer.release();
+	if(mesh.indexBuffer) mesh.indexBuffer.release();
+	// mesh.instanceBuffer.release();
+}
+void release_mesh(mesh *mesh) { release_mesh(*mesh); }
+
 //////////////////////////////////////////////////////////////////////
 // #Material
 //////////////////////////////////////////////////////////////////////
@@ -929,6 +953,15 @@ void material_upload(wgpu_state state, material* material, material_configuratio
 	material_upload(state, *material, config);
 }
 
+void release_material(material& material, bool release_textures /*= true*/, bool release_shaders /*= true*/) {
+	if(release_shaders) for(auto& shader: material.get_shaders())
+		release_shader(shader);
+	if(release_textures) for(auto& texture: material.get_textures())
+		if(texture) release_texture(texture);
+	material.pipeline.release(); // TODO: Fails?
+}
+void release_material(material *material) { release_material(*material); }
+
 material create_material(wgpu_state state, shader* shaders, size_t shader_count, material_configuration config /*= {}*/) {
 	material out {.shaderCount = (index_t)shader_count, .shaders = shaders};
 	material_upload(state, out, config);
@@ -955,6 +988,17 @@ void model_upload(wgpu_state state, model* model) {
 	model_upload(state, *model);
 }
 
+void release_model(model& model, bool release_meshes /*= true*/, bool release_materials /*= true*/, bool release_textures /*= true*/, bool release_shaders /*= true*/) {
+	if(release_meshes) for(auto& mesh: model.get_meshes())
+		release_mesh(mesh);
+	if(release_materials) for(auto& material: model.get_materials())
+		release_material(material, release_textures, release_shaders);
+	
+	if(model.heap_allocated) delete model.bones;
+	// TODO: Other things need deleting?
+}
+void release_model(model* model) { release_model(*model); }
+
 void model_draw_instanced(wgpu_frame_state& frame, model& model, std::span<model_instance_data> instances) WAYLIB_TRY {
 	static WGPUBufferDescriptor bufferDesc = {
 		.label = "Waylib Instance Buffer",
@@ -979,7 +1023,7 @@ void model_draw_instanced(wgpu_frame_state& frame, model& model, std::span<model
 		bufferDesc.size = sizeof(model_instance_data) * instances.size();
 		wgpu::Buffer instanceBuffer = frame.state.device.createBuffer(bufferDesc);
 		frame.state.device.getQueue().writeBuffer(instanceBuffer, 0, instances.data(), sizeof(model_instance_data) * instances.size());
-		WAYLIB_RELEASE_BUFFER_AT_FRAME_END(frame, instanceBuffer);
+		frame_defer(frame) { instanceBuffer.destroy(); instanceBuffer.release(); };
 
 		bindings[0].buffer = instanceBuffer;
 		bindings[0].size = sizeof(model_instance_data) * instances.size();
@@ -997,7 +1041,7 @@ void model_draw_instanced(wgpu_frame_state& frame, model& model, std::span<model
 		std::move(tex.begin(), tex.end(), bindings.begin() + 1);
 
 		// Bind the instance and texture buffers
-		wgpu::BindGroup bindGroup = frame.state.device.createBindGroup(bindGroupDesc); WAYLIB_RELEASE_AT_FRAME_END(frame, bindGroup);
+		wgpu::BindGroup bindGroup = frame.state.device.createBindGroup(bindGroupDesc); frame_defer(frame) { bindGroup.release(); };
 		frame.render_pass.setBindGroup(0, bindGroup, 0, nullptr);
 
 		size_t currentOffset = 0;
@@ -1170,6 +1214,19 @@ WAYLIB_OPTIONAL(const texture*) get_default_cube_texture(wgpu_state state) {
 	if(texture.has_value) return &texture.value;
 	return {};
 }
+
+void release_image(image& image) {
+	if(image.heap_allocated) delete image.data;
+}
+void release_image(image* image) { release_image(*image); }
+
+void release_texture(texture& texture) {
+	if(texture.heap_allocated) release_image(texture.cpu_data);
+	texture.view.release();
+	texture.sampler.release();
+	texture.gpu_data.release();
+}
+void release_texture(texture* texture) { release_texture(*texture); }
 
 #ifdef WAYLIB_NAMESPACE_NAME
 }
