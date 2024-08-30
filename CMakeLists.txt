@@ -37,7 +37,7 @@ else()
 endif()
 
 
-add_library(waylib waylib.cpp shader_preprocessor.cpp)
+add_library(waylib waylib.cpp shader_preprocessor.cpp compute.cpp)
 target_link_libraries(waylib PUBLIC waylib_common_bundled)
 
 add_library(waylib_window window.cpp)

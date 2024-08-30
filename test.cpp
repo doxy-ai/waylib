@@ -35,6 +35,30 @@ int main() {
 	if(!wl::window_automatically_reconfigure_surface_on_resize(window, state))
 		wl::window_automatically_reconfigure_surface_on_resize(window, state, {.presentation_mode = wgpu::PresentMode::Immediate});
 
+	std::array<float, 5> arr{1, 2, 3, 4, 5};
+	std::array<wl::buffer, 2> buffers = {wl::create_buffer(state, arr), wl::create_buffer(state, arr, wgpu::BufferUsage::CopySrc | wgpu::BufferUsage::Storage)}; // 0 == in, 1 == out
+	wl::buffer& outBuf = buffers[1];
+	wl::quick_dispatch(state, buffers, {}, wl::throw_if_null(wl::create_shader(
+		state, R"(
+@group(0) @binding(0) var<storage,read> inputBuffer: array<f32>;
+@group(0) @binding(1) var<storage,read_write> outputBuffer: array<f32>;
+
+// The function to evaluate for each element of the processed buffer
+fn f(x: f32) -> f32 {
+	return 3.0 * x + 1.0;
+}
+
+@compute @workgroup_size(5)
+fn compute(@builtin(global_invocation_id) id: vec3<u32>) {
+	// Apply the function f to the buffer element at index id.x:
+	outputBuffer[id.x] = f(inputBuffer[id.x]);
+})",
+		{.compute_entry_point = "compute", .name = "Compute Shader Test"}
+	)), {1, 1, 1});
+	outBuf.cpu_data = nullptr;
+	wl::buffer_download(state, outBuf);
+	for(auto& buffer: buffers) wl::buffer_release(buffer);
+
 	// Load the shader module
 	wl::model model = wl::throw_if_null(wl::load_obj_model("resources/suzane_highpoly.obj", state)); defer { wl::release_model(model); };
 	wl::shader_preprocessor* p = wl::preprocessor_initialize_virtual_filesystem(wl::create_shader_preprocessor(), state);

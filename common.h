@@ -130,6 +130,20 @@ typedef struct texture {
 	template struct optional<texture>;
 #endif
 
+struct buffer {
+	size_t size;
+	size_t offset;
+	uint8_t* cpu_data;
+	WAYLIB_C_OR_CPP_TYPE(WGPUBuffer, wgpu::Buffer) data;
+	const char* label;
+	bool heap_allocated;
+};
+#ifdef __cplusplus
+	template struct optional<buffer>;
+#endif
+
+
+
 // Shader
 typedef struct shader {
 	// unsigned char* source;
@@ -147,6 +161,24 @@ typedef struct shader {
 } shader;
 #ifdef __cplusplus
 	template struct optional<shader>;
+#endif
+
+struct computer {
+	index_t buffer_count;
+	buffer* buffers;
+	index_t texture_count;
+	texture* textures;
+
+	shader shader;
+	WAYLIB_C_OR_CPP_TYPE(WGPUComputePipeline, wgpu::ComputePipeline) pipeline;
+
+#ifdef WAYLIB_ENABLE_CLASSES
+	inline std::span<buffer> get_buffers() { return {buffers, buffer_count}; }
+	inline std::span<texture> get_textures() { return {textures, texture_count}; }
+#endif
+};
+#ifdef __cplusplus
+	template struct optional<computer>;
 #endif
 
 // Material

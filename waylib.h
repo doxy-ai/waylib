@@ -216,6 +216,11 @@ struct texture_config {
 	;
 };
 
+struct computer_recording_state {
+	WAYLIB_C_OR_CPP_TYPE(WGPUComputePassEncoder, wgpu::ComputePassEncoder) pass;
+	WAYLIB_C_OR_CPP_TYPE(WGPUBindGroup, wgpu::BindGroup) bind_group;
+};
+
 
 
 
@@ -556,6 +561,126 @@ void release_image(
 
 void release_texture(
 	texture* texture
+);
+
+void upload_buffer(
+	wgpu_state state, 
+	buffer* buffer, 
+	WGPUBufferUsageFlags usage 
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= WGPUBufferUsage_CopyDst | WGPUBufferUsage_Storage
+#endif
+	, bool free_cpu_data
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= false
+#endif
+);
+
+buffer create_buffer(
+	wgpu_state state, 
+	void* data,
+	size_t size,
+	WGPUBufferUsageFlags usage
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		 = WGPUBufferUsage_CopyDst | WGPUBufferUsage_Storage
+#endif
+	, const char* label
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		 = nullptr
+#endif
+);
+void* buffer_map(
+	wgpu_state state, 
+	buffer* buffer, 
+	WGPUMapModeFlags mode 
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= WGPUMapMode_None
+#endif
+);
+const void* buffer_map_const(
+	wgpu_state state, 
+	buffer* buffer, 
+	WGPUMapModeFlags mode 
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= WGPUMapMode_None
+#endif
+);
+
+void buffer_unmap(buffer* buffer);
+
+void buffer_release(buffer* buffer);
+
+void buffer_copy_record_existing(
+	WGPUCommandEncoder encoder, 
+	buffer* dest, 
+	buffer* source
+);
+
+void buffer_copy(
+	wgpu_state state, 
+	buffer* dest, 
+	buffer* source
+);
+
+void buffer_download(
+	wgpu_state state, 
+	buffer* buffer, 
+	bool create_intermediate_buffer 
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
+);
+
+void upload_computer(
+	wgpu_state state, 
+	computer* compute, 
+	const char* label
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= nullptr
+#endif
+);
+
+computer_recording_state computer_record_existing(
+	wgpu_state state, 
+	WGPUCommandEncoder encoder, 
+	computer* compute, 
+	vec3u workgroups, 
+	bool end
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
+);
+
+void computer_dispatch(
+	wgpu_state state, 
+	computer* compute, 
+	vec3u workgroups
+);
+
+void computer_release(
+	computer* compute, 
+	bool free_shader
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
+	, bool free_buffers
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= false
+#endif
+	, bool free_textures
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= false
+#endif
+);
+
+void quick_dispatch(
+	wgpu_state state, 
+	buffer* buffers,
+	size_t buffer_size,
+	texture* textures,
+	size_t texture_size,
+	shader compute_shader, 
+	vec3u workgroups
 );
 
 #ifdef __cplusplus

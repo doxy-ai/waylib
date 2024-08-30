@@ -245,6 +245,203 @@ void release_texture(
 	texture& texture
 );
 
+void upload_buffer(
+	wgpu_state state, 
+	buffer& buffer, 
+	WGPUBufferUsageFlags usage 
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Storage
+#endif
+	, bool free_cpu_data
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+	= false
+#endif
+);
+
+buffer create_buffer(
+	wgpu_state state, 
+	std::span<std::byte> data, 
+	WGPUBufferUsageFlags usage
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		 = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Storage
+#endif
+	, WAYLIB_OPTIONAL(std::string_view) label
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		 = {}
+#endif
+);
+
+template<typename T>
+inline buffer create_buffer(
+	wgpu_state state, 
+	T& data, 
+	WGPUBufferUsageFlags usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Storage, 
+	WAYLIB_OPTIONAL(std::string_view) label = {}
+){
+	return create_buffer(state, std::span<std::byte>{(std::byte*)&data, sizeof(T)}, usage, label);
+}
+
+template<typename T>
+requires(!std::is_same_v<T, std::byte>)
+inline buffer create_buffer(
+	wgpu_state state, 
+	std::span<T> data, 
+	WGPUBufferUsageFlags usage 
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Storage, 
+#endif
+	WAYLIB_OPTIONAL(std::string_view) label 
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
+){
+	return create_buffer(state, std::span<std::byte>{(std::byte*)data.data(), data.size() * sizeof(T)}, usage, label);
+}
+
+void* buffer_map(
+	wgpu_state state, 
+	buffer& buffer, 
+	WGPUMapModeFlags mode 
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= wgpu::MapMode::None
+#endif
+);
+const void* buffer_map_const(
+	wgpu_state state, 
+	buffer& buffer, 
+	WGPUMapModeFlags mode 
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= wgpu::MapMode::None
+#endif
+);
+
+template<typename T>
+inline T& buffer_map(
+	wgpu_state state, 
+	buffer& buffer,
+	WGPUMapModeFlags mode 
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= wgpu::MapMode::None
+#endif
+) {
+	assert(buffer.size == sizeof(T));
+	return *(T*)buffer_map(state, buffer, mode);
+}
+
+template<typename T>
+inline const T& buffer_map_const(
+	wgpu_state state, 
+	buffer& buffer,
+	WGPUMapModeFlags mode 
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= wgpu::MapMode::None
+#endif
+) {
+	assert(buffer.size == sizeof(T));
+	return *(T*)buffer_map_const(state, buffer, mode);
+}
+
+template<typename T>
+inline std::span<T> buffer_map(
+	wgpu_state state, 
+	buffer& buffer, 
+	WGPUMapModeFlags mode 
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= wgpu::MapMode::None
+#endif
+) {
+	assert((buffer.size % sizeof(T)) == 0);
+	return {(T*)buffer_map(state, buffer, mode), buffer.size / sizeof(T)};
+}
+
+template<typename T>
+inline std::span<const T> buffer_map_const(
+	wgpu_state state, 
+	buffer& buffer,
+	WGPUMapModeFlags mode 
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= wgpu::MapMode::None
+#endif
+) {
+	assert((buffer.size % sizeof(T)) == 0);
+	return {(const T*)buffer_map_const(state, buffer, mode), buffer.size / sizeof(T)};
+}
+
+void buffer_unmap(buffer& buffer);
+
+void buffer_release(buffer& buffer);
+
+void buffer_copy_record_existing(
+	WGPUCommandEncoder encoder, 
+	buffer& dest, 
+	buffer& source
+);
+
+void buffer_copy(
+	wgpu_state state, 
+	buffer& dest, 
+	buffer& source
+);
+
+void buffer_download(
+	wgpu_state state, 
+	buffer& buffer, 
+	bool create_intermediate_buffer 
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
+);
+
+void upload_computer(
+	wgpu_state state, 
+	computer& compute, 
+	WAYLIB_OPTIONAL(std::string_view) label
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
+);
+
+computer_recording_state computer_record_existing(
+	wgpu_state state, 
+	WGPUCommandEncoder encoder, 
+	computer& compute, 
+	vec3u workgroups, 
+	bool end
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
+);
+
+void computer_dispatch(
+	wgpu_state state, 
+	computer& compute, 
+	vec3u workgroups
+);
+
+void computer_release(
+	computer& compute, 
+	bool free_shader
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
+	, bool free_buffers
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= false
+#endif
+	, bool free_textures
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= false
+#endif
+);
+
+void quick_dispatch(
+	wgpu_state state, 
+	std::span<buffer> buffers, 
+	std::span<texture> textures, 
+	shader compute_shader, 
+	vec3u workgroups
+);
+
 #ifdef WAYLIB_NAMESPACE_NAME
 }
 #endif

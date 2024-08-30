@@ -41,6 +41,13 @@ namespace detail {
 	template<>
 	struct vec_t<4, int32_t> { using type = glm::vec<4, int32_t, glm::defaultp>; };
 
+	template<>
+	struct vec_t<2, uint32_t> { using type = glm::vec<2, uint32_t, glm::defaultp>; };
+	template<>
+	struct vec_t<3, uint32_t> { using type = glm::vec<3, uint32_t, glm::defaultp>; };
+	template<>
+	struct vec_t<4, uint32_t> { using type = glm::vec<4, uint32_t, glm::defaultp>; };
+
 	template<size_t Rows, size_t Cols, typename Type>
 	struct mat_t {
 #ifndef _MSC_VER 
@@ -81,6 +88,7 @@ using mat4x4 = typename detail::mat_t<4, 4, T>::type;
 	dst(const src& other) : src(other) {} }
 WAYLIB_MATERIALIZE_TYPE(vec2i, vec2<int32_t>, vec2);
 WAYLIB_MATERIALIZE_TYPE(vec2f, vec2<float>, vec2);
+WAYLIB_MATERIALIZE_TYPE(vec3u, vec3<uint32_t>, vec3);
 WAYLIB_MATERIALIZE_TYPE(vec3f, vec3<float>, vec3);
 WAYLIB_MATERIALIZE_TYPE(vec4f, vec4<float>, vec4);
 WAYLIB_MATERIALIZE_TYPE(mat4x4f, mat4x4<float>, mat4x4);
