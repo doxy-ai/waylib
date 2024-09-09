@@ -103,11 +103,20 @@ typedef struct create_shader_configuration {
 } create_shader_configuration;
 
 typedef struct material_configuration {
-	WAYLIB_OPTIONAL(WGPUCompareFunction) depth_function
+	bool double_sided // Determines if the material should be culled from the back or if it should be visible from both sides
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= false 
+#endif
+	; WAYLIB_OPTIONAL(WGPUCompareFunction) depth_function
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= wgpu::CompareFunction::Less // Disables writing depth if not provided
 #endif
 	; // TODO: Add stencil support
+	shader_preprocessor* preprocessor
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= nullptr
+#endif
+	;
 } material_configuration;
 
 typedef struct model_process_optimization_configuration {
@@ -198,7 +207,7 @@ struct texture_config {
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= false
 #endif
-	 
+
 
 	// Note: The following settings are overwritten when creating from an image!
 	; bool float_data
@@ -229,14 +238,14 @@ void time_calculations(frame_time* frame_time);
 bool open_url(const char* url);
 
 void upload_utility_data(
-	wgpu_frame_state* frame, 
-	WAYLIB_OPTIONAL(camera_upload_data*) data, 
-	light* lights, 
-	size_t light_count, 
+	frame_state* frame,
+	WAYLIB_OPTIONAL(camera_upload_data*) data,
+	light* lights,
+	size_t light_count,
 	WAYLIB_OPTIONAL(frame_time) frame_time
 );
 
-wgpu_state create_default_state_from_instance(
+waylib_state create_default_state_from_instance(
 	WGPUInstance instance,
 	WGPUSurface surface
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
@@ -248,7 +257,7 @@ wgpu_state create_default_state_from_instance(
 #endif
 );
 
-wgpu_state create_default_state(
+waylib_state create_default_state(
 	WGPUSurface surface
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= nullptr
@@ -259,8 +268,8 @@ wgpu_state create_default_state(
 #endif
 );
 
-void release_wgpu_state(
-	wgpu_state state,
+void release_waylib_state(
+	waylib_state state,
 	bool release_adapter
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= true
@@ -272,7 +281,7 @@ void release_wgpu_state(
 );
 
 bool configure_surface(
-	wgpu_state state,
+	waylib_state state,
 	vec2i size,
 	surface_configuration config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
@@ -282,13 +291,15 @@ bool configure_surface(
 
 shader_preprocessor* create_shader_preprocessor();
 
+shader_preprocessor* shader_preprocessor_clone(shader_preprocessor* source);
+
 void release_shader_preprocessor(
 	shader_preprocessor* processor
 );
 
 shader_preprocessor* preprocessor_initialize_virtual_filesystem(
 	shader_preprocessor* processor,
-	wgpu_state state,
+	waylib_state state,
 	preprocess_shader_config config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
@@ -308,7 +319,7 @@ bool preprocessor_add_search_path(
 
 shader_preprocessor* preprocessor_initialize_platform_defines(
 	shader_preprocessor* processor,
-	wgpu_state state
+	waylib_state state
 );
 
 const char* preprocessor_get_cached_file(
@@ -345,7 +356,7 @@ const char* preprocess_shader(
 );
 
 WAYLIB_OPTIONAL(shader) create_shader(
-	wgpu_state state,
+	waylib_state state,
 	const char* wgsl_source_code,
 	create_shader_configuration config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
@@ -357,8 +368,25 @@ void release_shader(
 	shader* shader
 );
 
-WAYLIB_OPTIONAL(wgpu_frame_state) begin_drawing_render_texture(
-	wgpu_state state,
+WAYLIB_OPTIONAL(geometry_transformation_shader) create_geometry_transformation_shader(
+	waylib_state state,
+	const char* wgsl_source_code,
+	bool per_vertex_processing
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= false
+#endif
+	, create_shader_configuration config
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
+);
+
+void release_geometry_transformation_shader(
+	geometry_transformation_shader* shader
+);
+
+WAYLIB_OPTIONAL(frame_state) begin_drawing_render_texture(
+	waylib_state state,
 	WGPUTextureView render_texture,
 	vec2i render_texture_dimensions,
 	WAYLIB_OPTIONAL(color) clear_color
@@ -367,8 +395,8 @@ WAYLIB_OPTIONAL(wgpu_frame_state) begin_drawing_render_texture(
 #endif
 );
 
-WAYLIB_OPTIONAL(wgpu_frame_state) begin_drawing(
-	wgpu_state state,
+WAYLIB_OPTIONAL(frame_state) begin_drawing(
+	waylib_state state,
 	WAYLIB_OPTIONAL(color) clear_color
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
@@ -376,11 +404,11 @@ WAYLIB_OPTIONAL(wgpu_frame_state) begin_drawing(
 );
 
 void end_drawing(
-	wgpu_frame_state* frame
+	frame_state* frame
 );
 
 void present_frame(
-	wgpu_frame_state* frame
+	frame_state* frame
 );
 
 #ifndef WAYLIB_NO_CAMERAS
@@ -395,7 +423,7 @@ WAYLIB_C_OR_CPP_TYPE(mat4x4f_, mat4x4f) camera2D_get_matrix(
 );
 
 void begin_camera_mode3D(
-	wgpu_frame_state* frame,
+	frame_state* frame,
 	camera3D* camera,
 	vec2i window_dimensions,
 	light* lights
@@ -413,7 +441,7 @@ void begin_camera_mode3D(
 );
 
 void begin_camera_mode2D(
-	wgpu_frame_state* frame,
+	frame_state* frame,
 	camera2D* camera,
 	vec2i window_dimensions,
 	light* lights
@@ -431,7 +459,7 @@ void begin_camera_mode2D(
 );
 
 void begin_camera_mode_identity(
-	wgpu_frame_state* frame,
+	frame_state* frame,
 	vec2i window_dimensions,
 	light* lights
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
@@ -447,13 +475,23 @@ void begin_camera_mode_identity(
 #endif
 );
 
-void end_camera_mode(
-	wgpu_frame_state* frame
+void reset_camera_mode(
+	frame_state* frame
 );
 #endif // WAYLIB_NO_CAMERAS
 
+void mesh_generate_normals(
+	mesh* mesh,
+	bool weighted_normals
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= false
+#endif
+);
+
+void mesh_generate_tangents(mesh* mesh);
+
 void mesh_upload(
-	wgpu_state state,
+	waylib_state state,
 	mesh* mesh
 );
 
@@ -462,7 +500,7 @@ void release_mesh(
 );
 
 void material_upload(
-	wgpu_state state,
+	waylib_state state,
 	material* material,
 	material_configuration config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
@@ -471,7 +509,7 @@ void material_upload(
 );
 
 material create_material(
-	wgpu_state state,
+	waylib_state state,
 	shader* shaders,
 	size_t shader_count,
 	material_configuration config
@@ -490,12 +528,44 @@ void release_material(
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= true
 #endif
+	, bool release_transformer
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
+);
+
+pbr_material create_pbr_material(
+	waylib_state state,
+	shader* shaders,
+	size_t shader_count,
+	WAYLIB_NULLABLE(texture*)* textures
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= nullptr
+#endif
+	, size_t texture_count
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= 0
+#endif
+	, material_configuration config
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
+);
+
+WAYLIB_OPTIONAL(pbr_material) create_default_pbr_material(
+	waylib_state state,
+	WAYLIB_NULLABLE(texture*)* textures,
+	size_t texture_count,
+	material_configuration config
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
 );
 
 model_process_configuration default_model_process_configuration();
 
 void model_upload(
-	wgpu_state state,
+	waylib_state state,
 	model* model
 );
 
@@ -520,20 +590,20 @@ void release_model(
 );
 
 void model_draw_instanced(
-	wgpu_frame_state* frame,
+	frame_state* frame,
 	model* model,
 	model_instance_data* instances,
 	size_t instance_count
 );
 
 void model_draw(
-	wgpu_frame_state* frame,
+	frame_state* frame,
 	model* model
 );
 
 WAYLIB_OPTIONAL(texture) create_texture(
-	wgpu_state state, 
-	vec2i dimensions, 
+	waylib_state state,
+	vec2i dimensions,
 	texture_config config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
@@ -541,8 +611,8 @@ WAYLIB_OPTIONAL(texture) create_texture(
 );
 
 WAYLIB_OPTIONAL(texture) create_texture_from_image(
-	wgpu_state state, 
-	image* image, 
+	waylib_state state,
+	image* image,
 	texture_config config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
@@ -552,8 +622,8 @@ WAYLIB_OPTIONAL(texture) create_texture_from_image(
 #ifdef __cplusplus
 	template struct optional<const texture*>;
 #endif
-WAYLIB_OPTIONAL(const texture*) get_default_texture(wgpu_state state);
-WAYLIB_OPTIONAL(const texture*) get_default_cube_texture(wgpu_state state);
+WAYLIB_OPTIONAL(const texture*) get_default_texture(waylib_state state);
+WAYLIB_OPTIONAL(const texture*) get_default_cube_texture(waylib_state state);
 
 void release_image(
 	image* image
@@ -564,9 +634,9 @@ void release_texture(
 );
 
 void upload_buffer(
-	wgpu_state state, 
-	buffer* buffer, 
-	WGPUBufferUsageFlags usage 
+	waylib_state state,
+	buffer* buffer,
+	WGPUBufferUsageFlags usage
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= WGPUBufferUsage_CopyDst | WGPUBufferUsage_Storage
 #endif
@@ -577,7 +647,7 @@ void upload_buffer(
 );
 
 buffer create_buffer(
-	wgpu_state state, 
+	waylib_state state,
 	void* data,
 	size_t size,
 	WGPUBufferUsageFlags usage
@@ -590,17 +660,17 @@ buffer create_buffer(
 #endif
 );
 void* buffer_map(
-	wgpu_state state, 
-	buffer* buffer, 
-	WGPUMapModeFlags mode 
+	waylib_state state,
+	buffer* buffer,
+	WGPUMapModeFlags mode
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= WGPUMapMode_None
 #endif
 );
 const void* buffer_map_const(
-	wgpu_state state, 
-	buffer* buffer, 
-	WGPUMapModeFlags mode 
+	waylib_state state,
+	buffer* buffer,
+	WGPUMapModeFlags mode
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= WGPUMapMode_None
 #endif
@@ -611,29 +681,29 @@ void buffer_unmap(buffer* buffer);
 void buffer_release(buffer* buffer);
 
 void buffer_copy_record_existing(
-	WGPUCommandEncoder encoder, 
-	buffer* dest, 
-	buffer* source
+	WGPUCommandEncoder encoder,
+	buffer* dest,
+	const buffer* source
 );
 
 void buffer_copy(
-	wgpu_state state, 
-	buffer* dest, 
-	buffer* source
+	waylib_state state,
+	buffer* dest,
+	const buffer* source
 );
 
 void buffer_download(
-	wgpu_state state, 
-	buffer* buffer, 
-	bool create_intermediate_buffer 
+	waylib_state state,
+	buffer* buffer,
+	bool create_intermediate_buffer
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= true
 #endif
 );
 
 void upload_computer(
-	wgpu_state state, 
-	computer* compute, 
+	waylib_state state,
+	computer* compute,
 	const char* label
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= nullptr
@@ -641,10 +711,10 @@ void upload_computer(
 );
 
 computer_recording_state computer_record_existing(
-	wgpu_state state, 
-	WGPUCommandEncoder encoder, 
-	computer* compute, 
-	vec3u workgroups, 
+	waylib_state state,
+	WGPUCommandEncoder encoder,
+	computer* compute,
+	vec3u workgroups,
 	bool end
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= true
@@ -652,13 +722,13 @@ computer_recording_state computer_record_existing(
 );
 
 void computer_dispatch(
-	wgpu_state state, 
-	computer* compute, 
+	waylib_state state,
+	computer* compute,
 	vec3u workgroups
 );
 
-void computer_release(
-	computer* compute, 
+void release_computer(
+	computer* compute,
 	bool free_shader
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= true
@@ -674,12 +744,12 @@ void computer_release(
 );
 
 void quick_dispatch(
-	wgpu_state state, 
+	waylib_state state,
 	buffer* buffers,
 	size_t buffer_size,
 	texture* textures,
 	size_t texture_size,
-	shader compute_shader, 
+	shader compute_shader,
 	vec3u workgroups
 );
 

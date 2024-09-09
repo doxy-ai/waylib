@@ -39,18 +39,18 @@ wgpu::Color to_webgpu(const color& color);
 void time_calculations(frame_time& frame_time);
 
 void upload_utility_data(
-	wgpu_frame_state& frame, 
+	frame_state& frame,
 	WAYLIB_OPTIONAL(camera_upload_data&) data,
-	std::span<light> lights, 
+	std::span<light> lights,
 	WAYLIB_OPTIONAL(frame_time) frame_time
 );
 
 void end_drawing(
-	wgpu_frame_state& frame
+	frame_state& frame
 );
 
 void present_frame(
-	wgpu_frame_state& frame
+	frame_state& frame
 );
 
 #ifndef WAYLIB_NO_CAMERAS
@@ -65,7 +65,7 @@ mat4x4f camera2D_get_matrix(
 );
 
 void begin_camera_mode3D(
-	wgpu_frame_state& frame,
+	frame_state& frame,
 	camera3D& camera,
 	vec2i window_dimensions,
 	std::span<light> lights
@@ -79,7 +79,7 @@ void begin_camera_mode3D(
 );
 
 void begin_camera_mode2D(
-	wgpu_frame_state& frame,
+	frame_state& frame,
 	camera2D& camera,
 	vec2i window_dimensions,
 	std::span<light> lights
@@ -93,7 +93,7 @@ void begin_camera_mode2D(
 );
 
 void begin_camera_mode_identity(
-	wgpu_frame_state& frame,
+	frame_state& frame,
 	vec2i window_dimensions,
 	std::span<light> lights
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
@@ -105,19 +105,19 @@ void begin_camera_mode_identity(
 #endif
 );
 
-void end_camera_mode(
-	wgpu_frame_state& frame
+void reset_camera_mode(
+	frame_state& frame
 );
 #endif // WAYLIB_NO_CAMERAS
 
 #ifndef WAYLIB_NO_LIGHTS
 void light_upload(
-	wgpu_frame_state& frame,
+	frame_state& frame,
 	std::span<light> lights
 );
 
 // void begin_light_mode(
-// 	wgpu_frame_state& frame,
+// 	frame_state& frame,
 // 	light& light,
 // 	vec2i shadow_map_dimensions
 // );
@@ -127,8 +127,22 @@ void release_shader(
 	shader& shader
 );
 
+void release_geometry_transformation_shader(
+	geometry_transformation_shader& shader
+);
+
+void mesh_generate_normals(
+	mesh& mesh,
+	bool weighted_normals
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= false
+#endif
+);
+
+void mesh_generate_tangents(mesh& mesh);
+
 void mesh_upload(
-	wgpu_state state,
+	waylib_state state,
 	mesh& mesh
 );
 
@@ -137,7 +151,7 @@ void release_mesh(
 );
 
 void material_upload(
-	wgpu_state state,
+	waylib_state state,
 	material& material,
 	material_configuration config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
@@ -155,10 +169,14 @@ void release_material(
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= true
 #endif
+	, bool release_transformer
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= true
+#endif
 );
 
 material create_material(
-	wgpu_state state,
+	waylib_state state,
 	std::span<shader> shaders,
 	material_configuration config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
@@ -166,7 +184,7 @@ material create_material(
 #endif
 );
 material create_material(
-	wgpu_state state,
+	waylib_state state,
 	shader& shader,
 	material_configuration config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
@@ -174,8 +192,49 @@ material create_material(
 #endif
 );
 
+
+wgpu::BindGroupEntry pbr_material_default_data_binding_function(frame_state& frame, material& _mat);
+
+pbr_material create_pbr_material(
+	waylib_state state,
+	std::span<shader> shaders,
+	std::span<WAYLIB_NULLABLE(texture*)> textures
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
+	, material_configuration config
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
+);
+// TODO: Do we always want the option of a geometry shader?
+pbr_material create_pbr_material(
+	waylib_state state,
+	shader& shader,
+	std::span<WAYLIB_NULLABLE(texture*)> textures
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
+	, material_configuration config
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
+);
+
+WAYLIB_OPTIONAL(pbr_material) create_default_pbr_material(
+	waylib_state state,
+	std::span<WAYLIB_NULLABLE(texture*)> textures
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
+	, material_configuration config
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
+);
+
 void model_upload(
-	wgpu_state state,
+	waylib_state state,
 	model& model
 );
 
@@ -200,7 +259,7 @@ void release_model(
 );
 
 WAYLIB_OPTIONAL(model) load_model_from_memory(
-	wgpu_state state,
+	waylib_state state,
 	std::span<std::byte> data,
 	model_process_configuration config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
@@ -209,19 +268,19 @@ WAYLIB_OPTIONAL(model) load_model_from_memory(
 );
 
 void model_draw_instanced(
-	wgpu_frame_state& frame,
+	frame_state& frame,
 	model& model,
 	std::span<model_instance_data> instances
 );
 
 void model_draw(
-	wgpu_frame_state& frame,
+	frame_state& frame,
 	model& model
 );
 
 WAYLIB_OPTIONAL(texture) create_texture_from_image(
-	wgpu_state state, 
-	image& image, 
+	waylib_state state,
+	image& image,
 	texture_config config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
@@ -229,8 +288,8 @@ WAYLIB_OPTIONAL(texture) create_texture_from_image(
 );
 
 WAYLIB_OPTIONAL(texture) create_texture_from_image(
-	wgpu_state state, 
-	WAYLIB_OPTIONAL(image)&& image, 
+	waylib_state state,
+	WAYLIB_OPTIONAL(image)&& image,
 	texture_config config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
@@ -246,9 +305,9 @@ void release_texture(
 );
 
 void upload_buffer(
-	wgpu_state state, 
-	buffer& buffer, 
-	WGPUBufferUsageFlags usage 
+	waylib_state state,
+	buffer& buffer,
+	WGPUBufferUsageFlags usage
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Storage
 #endif
@@ -259,8 +318,8 @@ void upload_buffer(
 );
 
 buffer create_buffer(
-	wgpu_state state, 
-	std::span<std::byte> data, 
+	waylib_state state,
+	std::span<std::byte> data,
 	WGPUBufferUsageFlags usage
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		 = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Storage
@@ -273,9 +332,9 @@ buffer create_buffer(
 
 template<typename T>
 inline buffer create_buffer(
-	wgpu_state state, 
-	T& data, 
-	WGPUBufferUsageFlags usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Storage, 
+	waylib_state state,
+	T& data,
+	WGPUBufferUsageFlags usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Storage,
 	WAYLIB_OPTIONAL(std::string_view) label = {}
 ){
 	return create_buffer(state, std::span<std::byte>{(std::byte*)&data, sizeof(T)}, usage, label);
@@ -284,13 +343,13 @@ inline buffer create_buffer(
 template<typename T>
 requires(!std::is_same_v<T, std::byte>)
 inline buffer create_buffer(
-	wgpu_state state, 
-	std::span<T> data, 
-	WGPUBufferUsageFlags usage 
+	waylib_state state,
+	std::span<T> data,
+	WGPUBufferUsageFlags usage
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
-		= wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Storage, 
+		= wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Storage,
 #endif
-	WAYLIB_OPTIONAL(std::string_view) label 
+	WAYLIB_OPTIONAL(std::string_view) label
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
 #endif
@@ -299,17 +358,17 @@ inline buffer create_buffer(
 }
 
 void* buffer_map(
-	wgpu_state state, 
-	buffer& buffer, 
-	WGPUMapModeFlags mode 
+	waylib_state state,
+	buffer& buffer,
+	WGPUMapModeFlags mode
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= wgpu::MapMode::None
 #endif
 );
 const void* buffer_map_const(
-	wgpu_state state, 
-	buffer& buffer, 
-	WGPUMapModeFlags mode 
+	waylib_state state,
+	buffer& buffer,
+	WGPUMapModeFlags mode
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= wgpu::MapMode::None
 #endif
@@ -317,9 +376,9 @@ const void* buffer_map_const(
 
 template<typename T>
 inline T& buffer_map(
-	wgpu_state state, 
+	waylib_state state,
 	buffer& buffer,
-	WGPUMapModeFlags mode 
+	WGPUMapModeFlags mode
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= wgpu::MapMode::None
 #endif
@@ -330,9 +389,9 @@ inline T& buffer_map(
 
 template<typename T>
 inline const T& buffer_map_const(
-	wgpu_state state, 
+	waylib_state state,
 	buffer& buffer,
-	WGPUMapModeFlags mode 
+	WGPUMapModeFlags mode
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= wgpu::MapMode::None
 #endif
@@ -343,9 +402,9 @@ inline const T& buffer_map_const(
 
 template<typename T>
 inline std::span<T> buffer_map(
-	wgpu_state state, 
-	buffer& buffer, 
-	WGPUMapModeFlags mode 
+	waylib_state state,
+	buffer& buffer,
+	WGPUMapModeFlags mode
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= wgpu::MapMode::None
 #endif
@@ -356,9 +415,9 @@ inline std::span<T> buffer_map(
 
 template<typename T>
 inline std::span<const T> buffer_map_const(
-	wgpu_state state, 
+	waylib_state state,
 	buffer& buffer,
-	WGPUMapModeFlags mode 
+	WGPUMapModeFlags mode
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= wgpu::MapMode::None
 #endif
@@ -372,29 +431,29 @@ void buffer_unmap(buffer& buffer);
 void buffer_release(buffer& buffer);
 
 void buffer_copy_record_existing(
-	WGPUCommandEncoder encoder, 
-	buffer& dest, 
-	buffer& source
+	WGPUCommandEncoder encoder,
+	buffer& dest,
+	const buffer& source
 );
 
 void buffer_copy(
-	wgpu_state state, 
-	buffer& dest, 
-	buffer& source
+	waylib_state state,
+	buffer& dest,
+	const buffer& source
 );
 
 void buffer_download(
-	wgpu_state state, 
-	buffer& buffer, 
-	bool create_intermediate_buffer 
+	waylib_state state,
+	buffer& buffer,
+	bool create_intermediate_buffer
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= true
 #endif
 );
 
 void upload_computer(
-	wgpu_state state, 
-	computer& compute, 
+	waylib_state state,
+	computer& compute,
 	WAYLIB_OPTIONAL(std::string_view) label
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
@@ -402,10 +461,10 @@ void upload_computer(
 );
 
 computer_recording_state computer_record_existing(
-	wgpu_state state, 
-	WGPUCommandEncoder encoder, 
-	computer& compute, 
-	vec3u workgroups, 
+	waylib_state state,
+	WGPUCommandEncoder encoder,
+	computer& compute,
+	vec3u workgroups,
 	bool end
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= true
@@ -413,13 +472,13 @@ computer_recording_state computer_record_existing(
 );
 
 void computer_dispatch(
-	wgpu_state state, 
-	computer& compute, 
+	waylib_state state,
+	computer& compute,
 	vec3u workgroups
 );
 
-void computer_release(
-	computer& compute, 
+void release_computer(
+	computer& compute,
 	bool free_shader
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= true
@@ -435,10 +494,10 @@ void computer_release(
 );
 
 void quick_dispatch(
-	wgpu_state state, 
-	std::span<buffer> buffers, 
-	std::span<texture> textures, 
-	shader compute_shader, 
+	waylib_state state,
+	std::span<buffer> buffers,
+	std::span<texture> textures,
+	shader compute_shader,
 	vec3u workgroups
 );
 

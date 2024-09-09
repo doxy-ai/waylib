@@ -12,6 +12,11 @@ namespace WAYLIB_NAMESPACE_NAME {
 
 #include "math.h"
 
+inline mat4x4f& convert(mat4x4f_& mat) { return *(mat4x4f*)&mat; }
+inline const mat4x4f& convert(const mat4x4f_& mat) { return *(const mat4x4f*)&mat; }
+inline vec4f& convert(vec4f_& mat) { return *(vec4f*)&mat; }
+inline const vec4f& convert(const vec4f_& mat) { return *(const vec4f*)&mat; }
+
 struct radian {
 	float value;
 	constexpr static float DEG2RAD = 3.141592653589793238463/180.0;

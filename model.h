@@ -8,7 +8,7 @@ extern "C" {
 #endif
 
 WAYLIB_OPTIONAL(model) create_fullscreen_quad(
-	wgpu_state state, 
+	waylib_state state, 
 	WAYLIB_OPTIONAL(shader) fragment_shader, 
 	shader_preprocessor* p
 );
@@ -16,7 +16,7 @@ WAYLIB_OPTIONAL(model) create_fullscreen_quad(
 WAYLIB_OPTIONAL(model) load_obj_model(
 	const char* file_path
 #ifndef WAYLIB_NO_AUTOMATIC_UPLOAD
-	, WAYLIB_OPTIONAL(wgpu_state) state
+	, WAYLIB_OPTIONAL(waylib_state) state
 	#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
 	#endif

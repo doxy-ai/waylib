@@ -112,11 +112,11 @@ vec2i window_get_dimensions(window* window);
 
 WAYLIB_C_OR_CPP_TYPE(WGPUSurface, wgpu::Surface) window_get_surface(window* window, WGPUInstance instance);
 
-wgpu_state window_get_wgpu_state(window* window, wgpu_state partial);
+waylib_state window_get_waylib_state(window* window, waylib_state partial);
 
 bool window_configure_surface(
 	window* window,
-	wgpu_state state,
+	waylib_state state,
 	surface_configuration config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
@@ -125,14 +125,14 @@ bool window_configure_surface(
 
 bool window_automatically_reconfigure_surface_on_resize(
 	window* window,
-	wgpu_state state,
+	waylib_state state,
 	surface_configuration config
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
 #endif
 );
 
-wgpu_state create_default_state_from_window(
+waylib_state create_default_state_from_window(
 	window* window, bool prefer_low_power
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= false
@@ -141,7 +141,7 @@ wgpu_state create_default_state_from_window(
 
 #ifndef WAYLIB_NO_CAMERAS
 void window_begin_camera_mode3D(
-	wgpu_frame_state* frame,
+	frame_state* frame,
 	window* window,
 	camera3D* camera,
 	light* lights
@@ -159,7 +159,7 @@ void window_begin_camera_mode3D(
 );
 
 void window_begin_camera_mode2D(
-	wgpu_frame_state* frame,
+	frame_state* frame,
 	window* window,
 	camera2D* camera,
 	light* lights
@@ -177,7 +177,7 @@ void window_begin_camera_mode2D(
 );
 
 void window_begin_camera_mode_identity(
-	wgpu_frame_state* frame,
+	frame_state* frame,
 	window* window,
 	light* lights
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS

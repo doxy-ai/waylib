@@ -14,12 +14,12 @@ namespace WAYLIB_NAMESPACE_NAME {
 // #Pipeline Globals
 //////////////////////////////////////////////////////////////////////
 
-pipeline_globals& create_pipeline_globals(wgpu_state state) {
+pipeline_globals& create_pipeline_globals(waylib_state state) {
 	static pipeline_globals global;
 	if(global.created) return global;
 
 	// Create binding layout (don't forget to = Default)
-	std::array<wgpu::BindGroupLayoutEntry, 19> modelTimeBindingLayouts; modelTimeBindingLayouts.fill(wgpu::Default);
+	std::array<wgpu::BindGroupLayoutEntry, 23> modelTimeBindingLayouts; modelTimeBindingLayouts.fill(wgpu::Default);
 	std::array<wgpu::BindGroupLayoutEntry, 3> cameraTimeBindingLayouts; cameraTimeBindingLayouts.fill(wgpu::Default);
 
 	// G0 B0 == Instance Data
@@ -28,87 +28,111 @@ pipeline_globals& create_pipeline_globals(wgpu_state state) {
 	modelTimeBindingLayouts[0].buffer.type = wgpu::BufferBindingType::ReadOnlyStorage;
 	modelTimeBindingLayouts[0].buffer.minBindingSize = sizeof(model_instance_data);
 	modelTimeBindingLayouts[0].buffer.hasDynamicOffset = false;
-	// G0 B1 == Color Texture Data
+	// G0 B1 == Material Data
 	modelTimeBindingLayouts[1].binding = 1;
-	modelTimeBindingLayouts[1].visibility = wgpu::ShaderStage::Fragment;
-	modelTimeBindingLayouts[1].texture.sampleType = wgpu::TextureSampleType::Float;
-	modelTimeBindingLayouts[1].texture.viewDimension = wgpu::TextureViewDimension::_2D;
-	// G0 B2 == Color Sampler
+	modelTimeBindingLayouts[1].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[1].buffer.type = wgpu::BufferBindingType::Uniform;
+	modelTimeBindingLayouts[1].buffer.minBindingSize = WAYLIB_MATERIAL_DATA_SIZE;
+	modelTimeBindingLayouts[1].buffer.hasDynamicOffset = false;
+	// G0 B2 == Vertex Buffer Layout Data
 	modelTimeBindingLayouts[2].binding = 2;
-	modelTimeBindingLayouts[2].visibility = wgpu::ShaderStage::Fragment;
-	modelTimeBindingLayouts[2].sampler.type = wgpu::SamplerBindingType::Filtering;
-	// G0 B3 == Height Texture Data
+	modelTimeBindingLayouts[2].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[2].buffer.type = wgpu::BufferBindingType::ReadOnlyStorage;
+	modelTimeBindingLayouts[2].buffer.minBindingSize = sizeof(mesh_metadata);
+	modelTimeBindingLayouts[2].buffer.hasDynamicOffset = false;
+	// G0 B3 == Raw Vertex Data
 	modelTimeBindingLayouts[3].binding = 3;
-	modelTimeBindingLayouts[3].visibility = wgpu::ShaderStage::Fragment;
-	modelTimeBindingLayouts[3].texture.sampleType = wgpu::TextureSampleType::Float;
-	modelTimeBindingLayouts[3].texture.viewDimension = wgpu::TextureViewDimension::_2D;
-	// G0 B4 == Height Sampler
+	modelTimeBindingLayouts[3].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[3].buffer.type = wgpu::BufferBindingType::ReadOnlyStorage;
+	modelTimeBindingLayouts[3].buffer.minBindingSize = WAYLIB_MESH_VERTEX_SIZE;
+	modelTimeBindingLayouts[3].buffer.hasDynamicOffset = false;
+	// G0 B4 == Raw Index Data
 	modelTimeBindingLayouts[4].binding = 4;
-	modelTimeBindingLayouts[4].visibility = wgpu::ShaderStage::Fragment;
-	modelTimeBindingLayouts[4].sampler.type = wgpu::SamplerBindingType::Filtering;
-	// G0 B5 == Normal Texture Data
+	modelTimeBindingLayouts[4].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[4].buffer.type = wgpu::BufferBindingType::ReadOnlyStorage;
+	modelTimeBindingLayouts[4].buffer.minBindingSize = sizeof(index_t) * 3;
+	modelTimeBindingLayouts[4].buffer.hasDynamicOffset = false;
+	// G0 B5 == Color Texture Data
 	modelTimeBindingLayouts[5].binding = 5;
-	modelTimeBindingLayouts[5].visibility = wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[5].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
 	modelTimeBindingLayouts[5].texture.sampleType = wgpu::TextureSampleType::Float;
 	modelTimeBindingLayouts[5].texture.viewDimension = wgpu::TextureViewDimension::_2D;
-	// G0 B6 == Normal Sampler
+	// G0 B6 == Color Sampler
 	modelTimeBindingLayouts[6].binding = 6;
-	modelTimeBindingLayouts[6].visibility = wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[6].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
 	modelTimeBindingLayouts[6].sampler.type = wgpu::SamplerBindingType::Filtering;
-	// G0 B7 == PackedMap Texture Data
+	// G0 B7 == Cubemap Texture Data
 	modelTimeBindingLayouts[7].binding = 7;
-	modelTimeBindingLayouts[7].visibility = wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[7].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
 	modelTimeBindingLayouts[7].texture.sampleType = wgpu::TextureSampleType::Float;
-	modelTimeBindingLayouts[7].texture.viewDimension = wgpu::TextureViewDimension::_2D;
-	// G0 B8 == Packed Sampler
+	modelTimeBindingLayouts[7].texture.viewDimension = wgpu::TextureViewDimension::Cube;
+	// G0 B8 == Cubemap Sampler
 	modelTimeBindingLayouts[8].binding = 8;
-	modelTimeBindingLayouts[8].visibility = wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[8].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
 	modelTimeBindingLayouts[8].sampler.type = wgpu::SamplerBindingType::Filtering;
-	// G0 B9 == Roughness Texture Data
+	// G0 B9 == Height Texture Data
 	modelTimeBindingLayouts[9].binding = 9;
-	modelTimeBindingLayouts[9].visibility = wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[9].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
 	modelTimeBindingLayouts[9].texture.sampleType = wgpu::TextureSampleType::Float;
 	modelTimeBindingLayouts[9].texture.viewDimension = wgpu::TextureViewDimension::_2D;
-	// G0 B10 == Roughness Sampler
+	// G0 B10 == Height Sampler
 	modelTimeBindingLayouts[10].binding = 10;
-	modelTimeBindingLayouts[10].visibility = wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[10].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
 	modelTimeBindingLayouts[10].sampler.type = wgpu::SamplerBindingType::Filtering;
-	// G0 B11 == Metalness Texture Data
+	// G0 B11 == Normal Texture Data
 	modelTimeBindingLayouts[11].binding = 11;
-	modelTimeBindingLayouts[11].visibility = wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[11].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
 	modelTimeBindingLayouts[11].texture.sampleType = wgpu::TextureSampleType::Float;
 	modelTimeBindingLayouts[11].texture.viewDimension = wgpu::TextureViewDimension::_2D;
-	// G0 B12 == Metalness Sampler
+	// G0 B12 == Normal Sampler
 	modelTimeBindingLayouts[12].binding = 12;
-	modelTimeBindingLayouts[12].visibility = wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[12].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
 	modelTimeBindingLayouts[12].sampler.type = wgpu::SamplerBindingType::Filtering;
-	// G0 B13 == AmbientOcclusion Texture Data
+	// G0 B13 == PackedMap Texture Data
 	modelTimeBindingLayouts[13].binding = 13;
-	modelTimeBindingLayouts[13].visibility = wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[13].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
 	modelTimeBindingLayouts[13].texture.sampleType = wgpu::TextureSampleType::Float;
 	modelTimeBindingLayouts[13].texture.viewDimension = wgpu::TextureViewDimension::_2D;
-	// G0 B14 == AO Sampler
+	// G0 B14 == Packed Sampler
 	modelTimeBindingLayouts[14].binding = 14;
-	modelTimeBindingLayouts[14].visibility = wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[14].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
 	modelTimeBindingLayouts[14].sampler.type = wgpu::SamplerBindingType::Filtering;
-	// G0 B15 == Emission Texture Data
+	// G0 B15 == Roughness Texture Data
 	modelTimeBindingLayouts[15].binding = 15;
-	modelTimeBindingLayouts[15].visibility = wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[15].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
 	modelTimeBindingLayouts[15].texture.sampleType = wgpu::TextureSampleType::Float;
 	modelTimeBindingLayouts[15].texture.viewDimension = wgpu::TextureViewDimension::_2D;
-	// G0 B16 == Emmission Sampler
+	// G0 B16 == Roughness Sampler
 	modelTimeBindingLayouts[16].binding = 16;
-	modelTimeBindingLayouts[16].visibility = wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[16].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
 	modelTimeBindingLayouts[16].sampler.type = wgpu::SamplerBindingType::Filtering;
-	// G0 B17 == Cubemap Texture Data
+	// G0 B17 == Metalness Texture Data
 	modelTimeBindingLayouts[17].binding = 17;
-	modelTimeBindingLayouts[17].visibility = wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[17].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
 	modelTimeBindingLayouts[17].texture.sampleType = wgpu::TextureSampleType::Float;
-	modelTimeBindingLayouts[17].texture.viewDimension = wgpu::TextureViewDimension::Cube;
-	// G0 B18 == Cubemap Sampler
+	modelTimeBindingLayouts[17].texture.viewDimension = wgpu::TextureViewDimension::_2D;
+	// G0 B18 == Metalness Sampler
 	modelTimeBindingLayouts[18].binding = 18;
-	modelTimeBindingLayouts[18].visibility = wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[18].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
 	modelTimeBindingLayouts[18].sampler.type = wgpu::SamplerBindingType::Filtering;
+	// G0 B19 == AmbientOcclusion Texture Data
+	modelTimeBindingLayouts[19].binding = 19;
+	modelTimeBindingLayouts[19].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[19].texture.sampleType = wgpu::TextureSampleType::Float;
+	modelTimeBindingLayouts[19].texture.viewDimension = wgpu::TextureViewDimension::_2D;
+	// G0 B20 == AO Sampler
+	modelTimeBindingLayouts[20].binding = 20;
+	modelTimeBindingLayouts[20].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[20].sampler.type = wgpu::SamplerBindingType::Filtering;
+	// G0 B21 == Emission Texture Data
+	modelTimeBindingLayouts[21].binding = 21;
+	modelTimeBindingLayouts[21].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[21].texture.sampleType = wgpu::TextureSampleType::Float;
+	modelTimeBindingLayouts[21].texture.viewDimension = wgpu::TextureViewDimension::_2D;
+	// G0 B22 == Emmission Sampler
+	modelTimeBindingLayouts[22].binding = 22;
+	modelTimeBindingLayouts[22].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
+	modelTimeBindingLayouts[22].sampler.type = wgpu::SamplerBindingType::Filtering;
 
 	// G1 B0 == Camera Data
 	cameraTimeBindingLayouts[0].binding = 0;
@@ -131,13 +155,13 @@ pipeline_globals& create_pipeline_globals(wgpu_state state) {
 
 	// Create a bind group layout
 	wgpu::BindGroupLayoutDescriptor bindGroupLayoutDesc{};
-	// G0 == Instance (B0)/Texture Data
-	bindGroupLayoutDesc.label = "Waylib Instance Data Bind Group Layout";
+	// G0 == Instance (B0)/Material (B1)/Raw Vertex(B2/3)/Texture Data
+	bindGroupLayoutDesc.label = "Waylib Model Time Data Bind Group Layout";
 	bindGroupLayoutDesc.entryCount = modelTimeBindingLayouts.size();
 	bindGroupLayoutDesc.entries = modelTimeBindingLayouts.data();
 	global.bindGroupLayouts[0] = state.device.createBindGroupLayout(bindGroupLayoutDesc);
 	// G1 == Utility Camera (B0) / Light (B1) / Time (B2) Data
-	bindGroupLayoutDesc.label = "Waylib Utility Data Bind Group Layout";
+	bindGroupLayoutDesc.label = "Waylib Camera Time Data Bind Group Layout";
 	bindGroupLayoutDesc.entryCount = cameraTimeBindingLayouts.size();
 	bindGroupLayoutDesc.entries = cameraTimeBindingLayouts.data();
 	global.bindGroupLayouts[1] = state.device.createBindGroupLayout(bindGroupLayoutDesc);
@@ -152,7 +176,10 @@ pipeline_globals& create_pipeline_globals(wgpu_state state) {
 		cameraTimeBindingLayouts[0].buffer.minBindingSize,
 		cameraTimeBindingLayouts[1].buffer.minBindingSize,
 		cameraTimeBindingLayouts[2].buffer.minBindingSize,
-		modelTimeBindingLayouts[0].buffer.minBindingSize
+		modelTimeBindingLayouts[0].buffer.minBindingSize,
+		modelTimeBindingLayouts[1].buffer.minBindingSize,
+		modelTimeBindingLayouts[2].buffer.minBindingSize,
+		modelTimeBindingLayouts[3].buffer.minBindingSize
 	});
 	return global;
 }

@@ -39,6 +39,8 @@
 extern "C" {
 #endif
 
+typedef uint32_t bool32;
+
 struct shader_preprocessor;
 struct camera_globals;
 
@@ -55,7 +57,6 @@ typedef struct color8 {
 #ifdef __cplusplus
 	template struct optional<color8>;
 #endif
-
 
 // typedef struct {
 // 	unsigned char r, g, b, a;
@@ -102,6 +103,7 @@ typedef struct image {
 
 WAYLIB_ENUM texture_slot {
 	C_PREPEND(TEXTURE_SLOT_, Color) = 0,
+	C_PREPEND(TEXTURE_SLOT_, Cubemap),
 	C_PREPEND(TEXTURE_SLOT_, Height),
 	C_PREPEND(TEXTURE_SLOT_, Normal),
 	C_PREPEND(TEXTURE_SLOT_, PackedMap),
@@ -109,11 +111,14 @@ WAYLIB_ENUM texture_slot {
 	C_PREPEND(TEXTURE_SLOT_, Metalness),
 	C_PREPEND(TEXTURE_SLOT_, AmbientOcclusion),
 	C_PREPEND(TEXTURE_SLOT_, Emission),
-	C_PREPEND(TEXTURE_SLOT_, Cubemap),
 	// Count of how many slots are supported
 	C_PREPEND(TEXTURE_SLOT_, Max),
 };
-#define WAYLIB_TEXTURE_SLOT_COUNT WAYLIB_C_OR_CPP_TYPE(TEXTURE_SLOT_Max, (index_t)texture_slot::Max)
+#ifndef WAYLIB_NAMESPACE_NAME
+	#define WAYLIB_TEXTURE_SLOT_COUNT WAYLIB_C_OR_CPP_TYPE(TEXTURE_SLOT_Max, (index_t)texture_slot::Max)
+#else
+	#define WAYLIB_TEXTURE_SLOT_COUNT WAYLIB_C_OR_CPP_TYPE(TEXTURE_SLOT_Max, (index_t)WAYLIB_NAMESPACE_NAME::texture_slot::Max)
+#endif
 
 typedef struct texture {
 	image* cpu_data;
@@ -171,6 +176,7 @@ struct computer {
 
 	shader shader;
 	WAYLIB_C_OR_CPP_TYPE(WGPUComputePipeline, wgpu::ComputePipeline) pipeline;
+	bool heap_allocated;
 
 #ifdef WAYLIB_ENABLE_CLASSES
 	inline std::span<buffer> get_buffers() { return {buffers, buffer_count}; }
@@ -181,12 +187,31 @@ struct computer {
 	template struct optional<computer>;
 #endif
 
+struct geometry_transformation_shader {
+	computer computer;
+
+	// bool process_instances;
+	bool per_vertex_processing; // When false a shader instance is dispatched per triangle, when true its dispatched per vertex
+	bool force_vertex_count_sync; // Forces the system to assume that the vertex count changed and sync it with cpu
+	float vertex_multiplier // The geometry output by the shader will have this many times more verticies than the input (rounded up to closest multiple of 3)
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= 1
+#endif
+	;
+};
+
+struct frame_state;
+struct material;
+typedef WGPUBindGroupEntry(material_data_binding_function_t)(frame_state*, material*);
+
 // Material
 typedef struct material {
 	index_t shaderCount;
 	shader* shaders;
 	WAYLIB_NULLABLE(texture*) textures[WAYLIB_TEXTURE_SLOT_COUNT];
 	WAYLIB_C_OR_CPP_TYPE(WGPURenderPipeline, wgpu::RenderPipeline) pipeline;
+	WAYLIB_NULLABLE(material_data_binding_function_t*) material_data_binding_function;
+	WAYLIB_NULLABLE(geometry_transformation_shader*) geometry_transformer;
 	bool heap_allocated // Wether or not this material is stored on the heap and should be automatically cleaned up
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= false
@@ -202,14 +227,65 @@ typedef struct material {
 	template struct optional<material>;
 #endif
 
+#ifdef WAYLIB_ENABLE_CLASSES
+typedef struct pbr_material : public material {
+#else
 typedef struct pbr_material {
 	material base; // "Inherits" from material
+#endif
 
+	vec4f_ color;
+	vec4f_ emmision;
+	float roughness;
+	float metalness;
 
+	float height_displacement_factor // NOTE: Unused by default pipeline
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= 0
+#endif
+	; float normal_strength
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= 1
+#endif
+	;
+
+	bool32 use_color_map;
+	bool32 use_height_map;
+	bool32 use_normal_map;
+	bool32 use_packed_map;
+	bool32 use_roughness_map;
+	bool32 use_metalness_map;
+	bool32 use_ambient_occlusion_map;
+	bool32 use_emmision_map;
+	bool32 use_enviornment_map; // Located in cubemap slot
+
+	char padding[20]; // Make it take up 96 bytes
 } pbr_material;
 #ifdef __cplusplus
 	template struct optional<pbr_material>;
 #endif
+
+#ifndef WAYLIB_MATERIAL_DATA_SIZE
+	#ifdef WAYLIB_NAMESPACE_NAME
+		#define WAYLIB_MATERIAL_DATA_SIZE (sizeof(WAYLIB_NAMESPACE_NAME::pbr_material) - sizeof(WAYLIB_NAMESPACE_NAME::material) - sizeof(WAYLIB_NAMESPACE_NAME::material) % 16)
+	#else
+		#define WAYLIB_MATERIAL_DATA_SIZE (sizeof(pbr_material) - sizeof(material) - sizeof(material) % 16)
+	#endif
+#endif
+
+struct mesh_metadata {
+	bool32 is_indexed;
+	uint32_t vertex_count;
+	uint32_t triangle_count;
+
+	uint32_t position_start;
+	uint32_t uvs_start;
+	uint32_t uvs2_start;
+	uint32_t normals_start;
+	uint32_t tangents_start;
+	uint32_t bitangents_start;
+	uint32_t colors_start;
+};
 
 // Mesh, vertex data
 // From: raylib.h
@@ -219,10 +295,11 @@ typedef struct mesh {
 
 	// Vertex attributes data
 	vec3f* positions;          // Vertex position (shader-location = 0)
-	vec2f* texcoords;          // Vertex texture coordinates (shader-location = 1)
-	vec2f* texcoords2;         // Vertex texture second coordinates (shader-location = 5)
+	vec2f* uvs;          // Vertex texture coordinates (shader-location = 1)
+	vec2f* uvs2;         // Vertex texture second coordinates (shader-location = 6)
 	vec3f* normals;            // Vertex normals (shader-location = 2)
-	vec4f* tangents;           // Vertex tangents (shader-location = 4)
+	vec3f* tangents;           // Vertex tangents (shader-location = 4)
+	vec3f* bitangents;         // Vertex bitangents (shader-location = 5)
 	color* colors;             // Vertex colors (shader-location = 3)
 	index_t* indices;          // Vertex indices (in case vertex data comes indexed)
 
@@ -239,10 +316,33 @@ typedef struct mesh {
 
 	WAYLIB_C_OR_CPP_TYPE(WGPUBuffer, wgpu::Buffer) buffer; // Pointer to the data on the gpu
 	WAYLIB_C_OR_CPP_TYPE(WGPUBuffer, wgpu::Buffer) indexBuffer; // Pointer to the index data on the gpu
-	WAYLIB_C_OR_CPP_TYPE(WGPUBuffer, wgpu::Buffer) instanceBuffer; // Pointer to the per-instance data on the gpu
+	// WAYLIB_C_OR_CPP_TYPE(WGPUBuffer, wgpu::Buffer) instanceBuffer; // Pointer to the per-instance data on the gpu
+
+#ifdef WAYLIB_ENABLE_CLASSES
+	inline mesh_metadata get_metadata() {
+		mesh_metadata meta = {
+			.is_indexed = (bool)indexBuffer,
+			.vertex_count = vertexCount,
+			.triangle_count = triangleCount,
+
+			.position_start = 0,
+			.uvs_start = static_cast<uint32_t>(meta.position_start + vertexCount * sizeof(vec3f)),
+			.uvs2_start = static_cast<uint32_t>(meta.uvs_start + vertexCount * sizeof(vec2f)),
+			.normals_start = static_cast<uint32_t>(meta.uvs2_start + vertexCount * sizeof(vec2f)),
+			.tangents_start = static_cast<uint32_t>(meta.normals_start + vertexCount * sizeof(vec3f)),
+			.bitangents_start = static_cast<uint32_t>(meta.tangents_start + vertexCount * sizeof(vec3f)),
+			.colors_start = static_cast<uint32_t>(meta.bitangents_start + vertexCount * sizeof(vec3f))
+		};
+		return meta;
+	}
+#endif
 } mesh;
 #ifdef __cplusplus
 	template struct optional<mesh>;
+
+	constexpr static size_t WAYLIB_MESH_VERTEX_SIZE = (sizeof(vec3f) * 4 + sizeof(vec2f) * 2 + sizeof(color));
+#else
+	#define WAYLIB_MESH_VERTEX_SIZE (sizeof(vec3f) * 4 + sizeof(vec2f) * 2 + sizeof(color))
 #endif
 
 // Bone, skeletal animation bone
@@ -251,10 +351,6 @@ typedef struct bone_info {
 	char name[32];          // Bone name
 	index_t parent;         // Bone parent
 	mat4x4f_ bind_pose;     // Bones base transformation (pose) // TODO: Why was this in model?
-
-#ifdef WAYLIB_ENABLE_CLASSES
-	inline mat4x4f& get_bind_pose() { return *(mat4x4f*)&bind_pose; }
-#endif
 } bone_info;
 
 // Model, meshes, materials and animation data
@@ -279,8 +375,6 @@ typedef struct model {
 	;
 
 #ifdef WAYLIB_ENABLE_CLASSES
-	inline mat4x4f& get_transform() { return *(mat4x4f*)&transform; }
-
 	index_t get_material_index_for_mesh(index_t meshID) {
 		if(mesh_materials == nullptr && mesh_count == material_count)
 			return meshID;
@@ -303,11 +397,6 @@ typedef struct model_instance_data {
 		= {1, 1, 1, 1}
 #endif
 	;
-
-#ifdef WAYLIB_ENABLE_CLASSES
-	inline mat4x4f& get_transform() { return *(mat4x4f*)&transform; }
-	inline mat4x4f& get_inverse_transform() { return *(mat4x4f*)&inverse_transform; }
-#endif
 } model_instance_data;
 #ifdef __cplusplus
 	template struct optional<model_instance_data>;
@@ -323,7 +412,7 @@ typedef struct model_instance_data {
 			vec3f up = {0, 1, 0}; /* Camera up vector (rotation over its axis)*/\
 			float field_of_view = 90; /* Camera field-of-view aperture in Y (degrees) in perspective, used as near plane width in orthographic */\
 			float near_clip_distance = .01, far_clip_distance = 1000; /* Distances before objects are culled */\
-			uint32_t orthographic = false; /* True if the camera should use orthographic projection */
+			bool32 orthographic = false; /* True if the camera should use orthographic projection */
 
 		#define WAYLIB_CAMERA_2D_MEMBERS\
 			vec3f offset; /* Camera offset (displacement from target)*/\
@@ -332,7 +421,7 @@ typedef struct model_instance_data {
 			degree rotation = 0; /* Camera rotation in degrees*/\
 			float near_clip_distance = .01, far_clip_distance = 1000; /* Distances before objects are culled */\
 			float zoom = 1; /* Camera zoom (scaling), should be 1.0f by default*/\
-			uint32_t pixel_perfect = false; /*When false screen is in range [0, 1] when true screen is in range [0, #pixels]*/
+			bool32 pixel_perfect = false; /*When false screen is in range [0, 1] when true screen is in range [0, #pixels]*/
 	#else
 		#define WAYLIB_CAMERA_3D_MEMBERS\
 			vec3f position; /* Camera position */\
@@ -342,7 +431,7 @@ typedef struct model_instance_data {
 			vec3f up; /* Camera up vector (rotation over its axis)*/\
 			float field_of_view; /* Camera field-of-view aperture in Y (degrees) in perspective, used as near plane width in orthographic */\
 			float near_clip_distance, far_clip_distance; /* Distances before objects are culled */\
-			uint32_t orthographic; /* True if the camera should use orthographic projection */\
+			bool32 orthographic; /* True if the camera should use orthographic projection */\
 
 		#define WAYLIB_CAMERA_2D_MEMBERS\
 			vec3f offset; /* Camera offset (displacement from target)*/\
@@ -351,11 +440,11 @@ typedef struct model_instance_data {
 			degree rotation; /* Camera rotation in degrees*/\
 			float near_clip_distance, far_clip_distance; /* Distances before objects are culled */\
 			float zoom; /* Camera zoom (scaling), should be 1.0f by default*/\
-			uint32_t pixel_perfect; /*When false screen is in range [0, 1] when true screen is in range [0, #pixels]*/
+			bool32 pixel_perfect; /*When false screen is in range [0, 1] when true screen is in range [0, #pixels]*/
 	#endif // WAYLIB_ENABLE_DEFAULT_PARAMETERS
 
 	#define WAYLIB_CAMERA_UPLOAD_DATA_MEMBERS\
-		uint32_t is_3D;\
+		bool32 is_3D;\
 		char padding1[12];\
 		camera3D settings3D;\
 		char padding2[4];\
@@ -429,29 +518,30 @@ typedef camera3D camera;	// By default a camera is a 3D camera
 #endif // WAYLIB_NO_LIGHTS
 
 // Struct holding all of the state needed by webgpu functions
-typedef struct wgpu_state {
+typedef struct waylib_state {
 	WAYLIB_C_OR_CPP_TYPE(WGPUInstance, wgpu::Instance) instance;
 	WAYLIB_C_OR_CPP_TYPE(WGPUAdapter, wgpu::Adapter) adapter;
 	WAYLIB_C_OR_CPP_TYPE(WGPUDevice, wgpu::Device) device;
 	WAYLIB_C_OR_CPP_TYPE(WGPUSurface, wgpu::Surface) surface;
-} wgpu_state;
+} waylib_state;
 #ifdef __cplusplus
-	template struct optional<wgpu_state>;
+	template struct optional<waylib_state>;
 #endif
 
 struct wgpu_frame_finalizers;
 
-typedef struct wgpu_frame_state {
-	wgpu_state state;
+typedef struct frame_state {
+	waylib_state state;
 	WAYLIB_C_OR_CPP_TYPE(WGPUTextureView, wgpu::TextureView) color_target;
 	WAYLIB_C_OR_CPP_TYPE(WGPUTexture, wgpu::Texture) depth_texture;
 	WAYLIB_C_OR_CPP_TYPE(WGPUTextureView, wgpu::TextureView) depth_target;
+	WAYLIB_C_OR_CPP_TYPE(WGPUCommandEncoder, wgpu::CommandEncoder) render_encoder;
 	WAYLIB_C_OR_CPP_TYPE(WGPUCommandEncoder, wgpu::CommandEncoder) encoder;
 	WAYLIB_C_OR_CPP_TYPE(WGPURenderPassEncoder, wgpu::RenderPassEncoder) render_pass;
 	wgpu_frame_finalizers* finalizers;
-} wgpu_frame_state;
+} frame_state;
 #ifdef __cplusplus
-	template struct optional<wgpu_frame_state>;
+	template struct optional<frame_state>;
 #endif
 
 typedef struct frame_time {
@@ -473,8 +563,8 @@ color8 convert_to_color8(const color c);
 
 WAYLIB_NULLABLE(void*) image_get_frame_and_size(
 	size_t* out_size,
-	image* image, 
-	size_t frame, 
+	image* image,
+	size_t frame,
 	size_t mip_level
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= 0
@@ -482,8 +572,8 @@ WAYLIB_NULLABLE(void*) image_get_frame_and_size(
 );
 
 WAYLIB_NULLABLE(void*) image_get_frame(
-	image* image, 
-	size_t frame, 
+	image* image,
+	size_t frame,
 	size_t mip_level
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= 0
@@ -491,7 +581,7 @@ WAYLIB_NULLABLE(void*) image_get_frame(
 );
 
 WAYLIB_OPTIONAL(image) merge_images(
-	image* images, 
+	image* images,
 	size_t images_size,
 	bool free_incoming
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS

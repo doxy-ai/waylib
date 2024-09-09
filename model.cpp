@@ -16,40 +16,27 @@
 namespace WAYLIB_NAMESPACE_NAME {
 #endif
 
-WAYLIB_OPTIONAL(image) merge_color_and_alpha(const image& color, const image& alpha) {
-	if(color.width != alpha.width && color.height != alpha.height
-		&& !(alpha.width == 1 && alpha.height == 1)) return {};
-	assert(color.frames == 1 && alpha.frames == 1);
-	image out = color;
-	out.float_data = true;
-	out.data32 = new WAYLIB_NAMESPACE_NAME::color[out.width * out.height];
-	for(size_t x = 0; x < out.width; ++x)
-		for(size_t y = 0; y < out.height; ++y) {
-			out.data32[y * out.height + x] = color.data32[y * out.height + x];
-			out.data32[y * out.height + x].a = alpha.data32[y * out.height + x].r;
-		}
-	return out;
-}
-
 //////////////////////////////////////////////////////////////////////
 // #Misc
 //////////////////////////////////////////////////////////////////////
 
-WAYLIB_OPTIONAL(model) create_fullscreen_quad(wgpu_state state, WAYLIB_OPTIONAL(shader) fragment_shader, shader_preprocessor* p) WAYLIB_TRY {
+WAYLIB_OPTIONAL(model) create_fullscreen_quad(waylib_state state, WAYLIB_OPTIONAL(shader) fragment_shader, shader_preprocessor* p) WAYLIB_TRY {
 	constexpr const char* vertexShaderSource = R"(
 #include <waylib/vertex>
 
 @vertex
-fn waylib_fullscreen_vertex_shader(in: waylib_input_vertex, @builtin(instance_index) instance_index: u32, @builtin(vertex_index) vertex_index: u32) -> waylib_output_vertex {
+fn waylib_fullscreen_vertex_shader(in: waylib_vertex_shader_vertex, @builtin(instance_index) instance_index: u32, @builtin(vertex_index) vertex_index: u32) -> waylib_fragment_shader_vertex {
 	let tint = instances[instance_index].tint;
-	return waylib_output_vertex(
+	return waylib_fragment_shader_vertex(
 		vec4(in.position, 1),
 		in.position,
-		in.texcoords,
+		in.uvs,
 		in.normal,
 		tint * in.color,
-		in.tangents,
-		in.texcoords2,
+		in.tangent,
+		in.bitangent,
+		in.uvs2,
+		instance_index,
 #ifdef WAYLIB_VERTEX_SUPPORTS_WIREFRAME
 		calculate_barycentric_coordinates(vertex_index)
 #endif
@@ -64,7 +51,7 @@ fn waylib_fullscreen_vertex_shader(in: waylib_input_vertex, @builtin(instance_in
 		mesh.triangleCount = 2;
 		mesh.positions = new vec3f[4] { vec3f(-1, -1, 0), vec3f(1, -1, 0), vec3f(1, 1, 0), vec3f(-1, 1, 0) };
 		mesh.normals = new vec3f[4] { vec3f(0, 0, -1), vec3f(0, 0, -1), vec3f(0, 0, -1), vec3f(0, 0, -1) };
-		mesh.texcoords = new vec2f[4] { vec2f(1, 1), vec2f(0, 1), vec2f(0, 0), vec2f(1, 0) };
+		mesh.uvs = new vec2f[4] { vec2f(1, 1), vec2f(0, 1), vec2f(0, 0), vec2f(1, 0) };
 		mesh.indices = new index_t[6] { 0, 1, 3, 1, 2, 3 };
 		mesh_upload(state, mesh);
 		return mesh;
@@ -93,7 +80,7 @@ fn waylib_fullscreen_vertex_shader(in: waylib_input_vertex, @builtin(instance_in
 #ifdef WAYLIB_NO_AUTOMATIC_UPLOAD
 WAYLIB_OPTIONAL(model) load_obj_model(const char* file_path)
 #else
-WAYLIB_OPTIONAL(model) load_obj_model(const char* file_path, WAYLIB_OPTIONAL(wgpu_state) state)
+WAYLIB_OPTIONAL(model) load_obj_model(const char* file_path, WAYLIB_OPTIONAL(waylib_state) state)
 #endif
 WAYLIB_TRY {
 	auto path = std::filesystem::absolute(file_path);
@@ -118,7 +105,7 @@ WAYLIB_TRY {
 	auto& materials = reader.GetMaterials();
 
 	model out;
-	out.get_transform() = glm::identity<glm::mat4x4>();
+	convert(out.transform) = glm::identity<glm::mat4x4>();
 	out.mesh_count = shapes.size();
 	out.meshes = new mesh[shapes.size()];
 	// TODO: Materials
@@ -161,8 +148,8 @@ WAYLIB_TRY {
 				if (idx.texcoord_index >= 0) {
 					tinyobj::real_t tx = attrib.texcoords[2*size_t(idx.texcoord_index)+0];
 					tinyobj::real_t ty = attrib.texcoords[2*size_t(idx.texcoord_index)+1];
-					if(!out.meshes[s].texcoords) out.meshes[s].texcoords = new vec2f[out.meshes[s].vertexCount];
-					out.meshes[s].texcoords[3 * f + v] = vec2f(tx, ty);
+					if(!out.meshes[s].uvs) out.meshes[s].uvs = new vec2f[out.meshes[s].vertexCount];
+					out.meshes[s].uvs[3 * f + v] = vec2f(tx, ty);
 				}
 
 				// Optional: vertex colors

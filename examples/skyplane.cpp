@@ -14,8 +14,8 @@ const char* shaderSource = R"(
 #include <waylib/textures>
 
 @fragment
-fn fragment(vert: waylib_output_vertex) -> @location(0) vec4f {
-	let color = waylib_sample_color(vert.texcoords);
+fn fragment(vert: waylib_fragment_shader_vertex) -> @location(0) vec4f {
+	let color = waylib_sample_color(vert.uvs);
 	let time = time.delta * 800;
 	return vec4f(color.rgb * time, 1);
 })";
@@ -25,7 +25,7 @@ const char* skyplaneShaderSource = R"(
 #include <waylib/textures>
 
 @fragment
-fn fragment(vert: waylib_output_vertex) -> @location(0) vec4f {
+fn fragment(vert: waylib_fragment_shader_vertex) -> @location(0) vec4f {
 	// Calculate the direction of the pixel
 	let clipSpacePos = vec4(vert.position.xy, 1, 1);
 	let worldSpacePos = inverse_view_projection_matrix() * clipSpacePos;
@@ -89,12 +89,12 @@ int main() {
 
 				wl::model_draw(frame, model);
 			}
-			wl::end_camera_mode(frame);
+			wl::reset_camera_mode(frame);
 		}
 		wl::end_drawing(frame);
 	}
 
 	wl::release_shader_preprocessor(p);
-	wl::release_wgpu_state(state);
+	wl::release_waylib_state(state);
 	wl::release_window(window);
 }

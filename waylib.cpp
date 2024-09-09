@@ -4,6 +4,8 @@
 #include "config.h"
 #include "waylib.h"
 
+#include "thirdparty/mikktspace.h"
+
 #include <cassert>
 #include <chrono>
 #include <cstring>
@@ -11,6 +13,8 @@
 #include <limits>
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/ext/matrix_clip_space.hpp>
+#include <thread>
+#include <webgpu/webgpu.hpp>
 
 #define OPEN_URL_NAMESPACE wl_detail
 #include "thirdparty/open.hpp"
@@ -20,7 +24,7 @@ namespace WAYLIB_NAMESPACE_NAME {
 #endif
 
 // Defined in common.cpp
-pipeline_globals& create_pipeline_globals(wgpu_state state);
+pipeline_globals& create_pipeline_globals(waylib_state state);
 
 //////////////////////////////////////////////////////////////////////
 // #Miscelanious
@@ -49,7 +53,7 @@ bool open_url(const char* url) WAYLIB_TRY {
 	return wl_detail::open_url(url);
 } WAYLIB_CATCH(false)
 
-wgpu::Buffer get_zero_buffer(wgpu_state state, size_t size) {
+wgpu::Buffer get_zero_buffer(waylib_state state, size_t size) {
 	static WGPUBufferDescriptor bufferDesc = {
 		.label = "Waylib Zero Buffer",
 		.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Storage | wgpu::BufferUsage::Uniform,
@@ -67,11 +71,12 @@ wgpu::Buffer get_zero_buffer(wgpu_state state, size_t size) {
 		}
 		zeroBuffer = state.device.createBuffer(bufferDesc);
 		state.device.getQueue().writeBuffer(zeroBuffer, 0, zeroData.data(), zeroData.size());
+		// std::memcpy(zeroBuffer.getMappedRange(0, zeroData.size()), zeroData.data(), zeroData.size()); zeroBuffer.unmap();
 	}
 	return zeroBuffer;
 };
 
-void upload_utility_data(wgpu_frame_state& frame, WAYLIB_OPTIONAL(camera_upload_data&) camera, std::span<light> lights, WAYLIB_OPTIONAL(frame_time) frame_time) WAYLIB_TRY {
+void upload_utility_data(frame_state& frame, WAYLIB_OPTIONAL(camera_upload_data&) camera, std::span<light> lights, WAYLIB_OPTIONAL(frame_time) frame_time) WAYLIB_TRY {
 	static WGPUBufferDescriptor cameraBufferDesc = {
 		.label = "Waylib Camera Buffer",
 		.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform,
@@ -86,9 +91,9 @@ void upload_utility_data(wgpu_frame_state& frame, WAYLIB_OPTIONAL(camera_upload_
 	};
 	static WGPUBufferDescriptor timeBufferDesc = {
 		.label = "Waylib Time Buffer",
-		.usage = /*wgpu::BufferUsage::CopyDst |*/ wgpu::BufferUsage::Uniform,
+		.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform,
 		.size = sizeof(frame_time),
-		.mappedAtCreation = true,
+		.mappedAtCreation = false,
 	};
 
 	static std::array<WGPUBindGroupEntry, 3> bindings = {WGPUBindGroupEntry{
@@ -116,33 +121,35 @@ void upload_utility_data(wgpu_frame_state& frame, WAYLIB_OPTIONAL(camera_upload_
 	}();
 
 	if(camera.has_value) {
-		wgpu::Buffer cameraBuffer = frame.state.device.createBuffer(cameraBufferDesc); frame_defer(frame) { cameraBuffer.destroy(); cameraBuffer.release(); };
+		wgpu::Buffer cameraBuffer = frame.state.device.createBuffer(cameraBufferDesc);
 		frame.state.device.getQueue().writeBuffer(cameraBuffer, 0, &camera.value, sizeof(camera_upload_data));
 		bindings[0].buffer = cameraBuffer;
+		frame_defer(frame) { cameraBuffer.destroy(); cameraBuffer.release(); };
 	} else bindings[0].buffer = get_zero_buffer(frame.state, sizeof(camera_upload_data));
 
 	if(!lights.empty()) {
 		lightBufferDesc.size = sizeof(light) * lights.size();
-		wgpu::Buffer lightBuffer = frame.state.device.createBuffer(lightBufferDesc); frame_defer(frame) { lightBuffer.destroy(); lightBuffer.release(); };
+		wgpu::Buffer lightBuffer = frame.state.device.createBuffer(lightBufferDesc);
 		frame.state.device.getQueue().writeBuffer(lightBuffer, 0, lights.data(), lightBufferDesc.size);
 		bindings[1].buffer = lightBuffer;
 		bindings[1].size = lightBufferDesc.size;
+		frame_defer(frame) { lightBuffer.destroy(); lightBuffer.release(); };
 	} else {
 		bindings[1].buffer = get_zero_buffer(frame.state, sizeof(light));
 		bindings[1].size = sizeof(light);
 	}
 
 	if(frame_time.has_value) {
-		wgpu::Buffer timeBuffer = frame.state.device.createBuffer(timeBufferDesc); frame_defer(frame) { timeBuffer.destroy(); timeBuffer.release(); };
-		// frame.state.device.getQueue().writeBuffer(frame_timeBuffer, 0, &frame_time.value, sizeof(frame_time));
-		std::memcpy(timeBuffer.getMappedRange(0, sizeof(frame_time)), &frame_time.value, sizeof(frame_time)); timeBuffer.unmap();
+		wgpu::Buffer timeBuffer = frame.state.device.createBuffer(timeBufferDesc);
+		frame.state.device.getQueue().writeBuffer(timeBuffer, 0, &frame_time.value, sizeof(frame_time.value));
 		bindings[2].buffer = timeBuffer;
-	} else bindings[2].buffer = get_zero_buffer(frame.state, sizeof(frame_time));
+		frame_defer(frame) { timeBuffer.destroy(); timeBuffer.release(); };
+	} else bindings[2].buffer = get_zero_buffer(frame.state, sizeof(frame_time.value));
 
 	auto bindGroup = frame.state.device.createBindGroup(bindGroupDesc); frame_defer(frame) { bindGroup.release(); };
 	frame.render_pass.setBindGroup(1, bindGroup, 0, nullptr);
 } WAYLIB_CATCH()
-void upload_utility_data(wgpu_frame_state* frame, WAYLIB_OPTIONAL(camera_upload_data*) data, light* lights, size_t light_count, WAYLIB_OPTIONAL(frame_time) frame_time) {
+void upload_utility_data(frame_state* frame, WAYLIB_OPTIONAL(camera_upload_data*) data, light* lights, size_t light_count, WAYLIB_OPTIONAL(frame_time) frame_time) {
 	WAYLIB_OPTIONAL(camera_upload_data&) camera = data.has_value ? *data.value : WAYLIB_OPTIONAL(camera_upload_data&){};
 	upload_utility_data(*frame, camera, {lights, light_count}, frame_time);
 }
@@ -158,7 +165,7 @@ void process_wgpu_events([[maybe_unused]] Device device, [[maybe_unused]] bool y
 //     device.poll(false);
 #elif defined(WEBGPU_BACKEND_EMSCRIPTEN)
     if (yieldToWebBrowser) {
-        emscripten_sleep(10);
+        emscripten_sleep(1);
     }
 #endif
 } WAYLIB_CATCH()
@@ -171,14 +178,49 @@ wgpu::IndexFormat calculate_index_format() {
 		return wgpu::IndexFormat::Uint16;
 	else return wgpu::IndexFormat::Uint32;
 }
+bool format_is_srgb(wgpu::TextureFormat format) {
+	switch(format) {
+	case WGPUTextureFormat_RGBA8UnormSrgb:
+	case WGPUTextureFormat_BGRA8UnormSrgb:
+	case WGPUTextureFormat_BC1RGBAUnormSrgb:
+	case WGPUTextureFormat_BC2RGBAUnormSrgb:
+	case WGPUTextureFormat_BC3RGBAUnormSrgb:
+	case WGPUTextureFormat_ETC2RGB8UnormSrgb:
+	case WGPUTextureFormat_ETC2RGB8A1UnormSrgb:
+	case WGPUTextureFormat_ETC2RGBA8UnormSrgb:
+	case WGPUTextureFormat_ASTC4x4UnormSrgb:
+	case WGPUTextureFormat_ASTC5x4UnormSrgb:
+	case WGPUTextureFormat_ASTC5x5UnormSrgb:
+	case WGPUTextureFormat_ASTC6x5UnormSrgb:
+	case WGPUTextureFormat_ASTC6x6UnormSrgb:
+	case WGPUTextureFormat_ASTC8x5UnormSrgb:
+	case WGPUTextureFormat_ASTC8x6UnormSrgb:
+	case WGPUTextureFormat_ASTC8x8UnormSrgb:
+	case WGPUTextureFormat_ASTC10x5UnormSrgb:
+	case WGPUTextureFormat_ASTC10x6UnormSrgb:
+	case WGPUTextureFormat_ASTC10x8UnormSrgb:
+	case WGPUTextureFormat_ASTC10x10UnormSrgb:
+	case WGPUTextureFormat_ASTC12x10UnormSrgb:
+	case WGPUTextureFormat_ASTC12x12UnormSrgb:
+		return true;
+	default: return false;
+	}
+}
 
-wgpu::TextureFormat surface_preferred_format(wgpu_state state) {
+wgpu::TextureFormat surface_preferred_format(waylib_state state) {
 	wgpu::SurfaceCapabilities capabilities;
 	state.surface.getCapabilities(state.adapter, &capabilities); // TODO: Always returns error?
+
+	// Assumes the formats are in order of preference... finds the first SRGB format
+	for(size_t i = 0; i < capabilities.formatCount; ++i)
+		if(format_is_srgb(capabilities.formats[i]))
+			return capabilities.formats[i];
+
+	set_error_message_raw("Failed to find SRGB surface format... falling back to linear.");
 	return capabilities.formats[0];
 }
 
-wgpu_state create_default_state_from_instance(WGPUInstance instance, WGPUSurface surface /*= nullptr*/, bool prefer_low_power /*= false*/) WAYLIB_TRY {
+waylib_state create_default_state_from_instance(WGPUInstance instance, WGPUSurface surface /*= nullptr*/, bool prefer_low_power /*= false*/) WAYLIB_TRY {
 	wgpu::RequestAdapterOptions adapterOpts = {};
 	adapterOpts.compatibleSurface = surface;
 	adapterOpts.powerPreference = prefer_low_power ? wgpu::PowerPreference::LowPower : wgpu::PowerPreference::HighPerformance;
@@ -214,11 +256,11 @@ wgpu_state create_default_state_from_instance(WGPUInstance instance, WGPUSurface
 	};
 } WAYLIB_CATCH({})
 
-wgpu_state create_default_state(WGPUSurface surface /*= nullptr*/, bool prefer_low_power /*= false*/) WAYLIB_TRY {
+waylib_state create_default_state(WGPUSurface surface /*= nullptr*/, bool prefer_low_power /*= false*/) WAYLIB_TRY {
 	return create_default_state_from_instance(wgpuCreateInstance({}), surface, prefer_low_power);
 } WAYLIB_CATCH({})
 
-void release_wgpu_state(wgpu_state state, bool release_adapter /*= true*/, bool release_instance /*= true*/) WAYLIB_TRY {
+void release_waylib_state(waylib_state state, bool release_adapter /*= true*/, bool release_instance /*= true*/) WAYLIB_TRY {
 	state.device.getQueue().release();
 	state.surface.release();
 	state.device.release();
@@ -227,13 +269,14 @@ void release_wgpu_state(wgpu_state state, bool release_adapter /*= true*/, bool 
 } WAYLIB_CATCH()
 
 // Returns true if the request present_mode is supported... returns false if we fall back fifo (can be confirmed its not just a memory allocation failure by making sure the first word of the error message is "desired")
-bool configure_surface(wgpu_state state, vec2i size, surface_configuration config /*= {}*/) WAYLIB_TRY {
+bool configure_surface(waylib_state state, vec2i size, surface_configuration config /*= {}*/) WAYLIB_TRY {
 	// Configure the surface
 	wgpu::SurfaceConfiguration descriptor = {};
 
 	wgpu::SurfaceCapabilities capabilities;
 	state.surface.getCapabilities(state.adapter, &capabilities); // TODO: Always returns error?
 
+	// Pick the prefered surface format with fallback
 	bool found = false;
 	for(size_t i = 0; i < capabilities.presentModeCount; ++i)
 		if(capabilities.presentModes[i] == config.presentation_mode) {
@@ -249,11 +292,9 @@ bool configure_surface(wgpu_state state, vec2i size, surface_configuration confi
 	descriptor.width = size.x;
 	descriptor.height = size.y;
 	descriptor.usage = wgpu::TextureUsage::RenderAttachment;
-	descriptor.format = capabilities.formats[0];
-
-	// And we do not need any particular view format:
-	descriptor.viewFormatCount = 0;
-	descriptor.viewFormats = nullptr;
+	descriptor.format = surface_preferred_format(state);
+	descriptor.viewFormatCount = 1;
+	descriptor.viewFormats = &descriptor.format;
 	descriptor.device = state.device;
 	descriptor.presentMode = config.presentation_mode;
 	descriptor.alphaMode = config.alpha_mode;
@@ -278,11 +319,15 @@ shader_preprocessor* create_shader_preprocessor() WAYLIB_TRY {
 	return new shader_preprocessor();
 } WAYLIB_CATCH(nullptr)
 
+shader_preprocessor* shader_preprocessor_clone(shader_preprocessor* source) WAYLIB_TRY {
+	return new shader_preprocessor(*source);
+} WAYLIB_CATCH(nullptr)
+
 void release_shader_preprocessor(shader_preprocessor* processor) WAYLIB_TRY {
 	delete processor;
 } WAYLIB_CATCH()
 
-shader_preprocessor* preprocessor_initialize_virtual_filesystem(shader_preprocessor* processor, wgpu_state state, preprocess_shader_config config /*= {}*/) WAYLIB_TRY {
+shader_preprocessor* preprocessor_initialize_virtual_filesystem(shader_preprocessor* processor, waylib_state state, preprocess_shader_config config /*= {}*/) WAYLIB_TRY {
 	if(processor->defines.find("WGPU_ADAPTER_TYPE") == std::string::npos)
 		preprocessor_initialize_platform_defines(processor, state);
 
@@ -310,6 +355,15 @@ shader_preprocessor* preprocessor_initialize_virtual_filesystem(shader_preproces
 	preprocess_shader_from_memory_and_cache(processor,
 #include "shaders/waylib/vertex.wgsl"
 		, "waylib/vertex", config);
+	preprocess_shader_from_memory_and_cache(processor,
+#include "shaders/waylib/pbr_data.wgsl"
+		, "waylib/pbr_data", config);
+	preprocess_shader_from_memory_and_cache(processor,
+#include "shaders/waylib/pbr.wgsl"
+		, "waylib/pbr", config);
+	preprocess_shader_from_memory_and_cache(processor,
+#include "shaders/waylib/geometry_shader.wgsl"
+		, "waylib/geometry_shader", config);
 	return processor;
 } WAYLIB_CATCH(nullptr)
 
@@ -326,7 +380,7 @@ bool preprocessor_add_search_path(shader_preprocessor* processor, const char* _p
 	return true;
 } WAYLIB_CATCH(false)
 
-shader_preprocessor* preprocessor_initialize_platform_defines(shader_preprocessor* processor, wgpu_state state) WAYLIB_TRY {
+shader_preprocessor* preprocessor_initialize_platform_defines(shader_preprocessor* processor, waylib_state state) WAYLIB_TRY {
 	detail::preprocessor_initialize_platform_defines(processor, state.adapter);
 	return processor;
 } WAYLIB_CATCH(nullptr)
@@ -359,7 +413,7 @@ const char* preprocess_shader(shader_preprocessor* processor, const char* path, 
 	return nullptr;
 } WAYLIB_CATCH(nullptr)
 
-WAYLIB_OPTIONAL(shader) create_shader(wgpu_state state, const char* wgsl_source_code, create_shader_configuration config /*= {}*/) WAYLIB_TRY {
+WAYLIB_OPTIONAL(shader) create_shader(waylib_state state, const char* wgsl_source_code, create_shader_configuration config /*= {}*/) WAYLIB_TRY {
 	wgpu::ShaderModuleDescriptor shaderDesc;
 	shaderDesc.label = config.name;
 #ifdef WEBGPU_BACKEND_WGPU
@@ -393,8 +447,45 @@ void release_shader(shader& shader) {
 }
 void release_shader(shader* shader) { release_shader(*shader); }
 
+WAYLIB_OPTIONAL(geometry_transformation_shader) create_geometry_transformation_shader(waylib_state state, const char* wgsl_source_code, bool per_vertex_processing /*= false*/, create_shader_configuration config /*= {}*/) WAYLIB_TRY {
+	geometry_transformation_shader geometry_transformer {
+		.computer = {
+			.buffer_count = 7,
+			.buffers = new buffer[7],
+			.texture_count = WAYLIB_TEXTURE_SLOT_COUNT,
+			.textures = new texture[WAYLIB_TEXTURE_SLOT_COUNT],
+			.heap_allocated = true
+		},
+		.per_vertex_processing = per_vertex_processing,
+	};
+	auto gp = config.preprocessor ? shader_preprocessor_clone(config.preprocessor) : preprocessor_initialize_virtual_filesystem(create_shader_preprocessor(), state);
+	if(!gp) return {};
+	defer {release_shader_preprocessor(gp);};
+	if(per_vertex_processing) preprocessor_add_define(gp, "WAYLIB_GEOMETRY_SHADER_PER_VERTEX_PROCESSING", "1");
+	config.preprocessor = gp;
+
+	if(!config.compute_entry_point) {
+		set_error_message_raw("NOTE: Overridding compute entry point with default.");
+		config.compute_entry_point = "waylib_default_geometry_shader";
+	}
+
+	auto shader = create_shader(state, wgsl_source_code, config);
+	if(!shader.has_value) return {};
+	geometry_transformer.computer.shader = shader.value;
+	upload_computer(state, geometry_transformer.computer);
+
+	return geometry_transformer;
+} WAYLIB_CATCH({})
+
+void release_geometry_transformation_shader(geometry_transformation_shader& shader) {
+	release_computer(shader.computer);
+}
+void release_geometry_transformation_shader(geometry_transformation_shader* shader) {
+	release_geometry_transformation_shader(*shader);
+}
+
 namespace detail{
-	std::pair<wgpu::RenderPipelineDescriptor, WAYLIB_OPTIONAL(wgpu::FragmentState)> shader_configure_render_pipeline_descriptor(wgpu_state state, shader& shader, wgpu::RenderPipelineDescriptor pipelineDesc = {}) {
+	std::pair<wgpu::RenderPipelineDescriptor, WAYLIB_OPTIONAL(wgpu::FragmentState)> shader_configure_render_pipeline_descriptor(waylib_state state, shader& shader, wgpu::RenderPipelineDescriptor pipelineDesc = {}) {
 		static WGPUBlendState blendState = {
 			.color = {
 				.operation = wgpu::BlendOperation::Add,
@@ -463,21 +554,33 @@ namespace detail{
 		};
 
 		static WGPUVertexAttribute tangentAttribute = {
-			.format = wgpu::VertexFormat::Float32x4,
+			.format = wgpu::VertexFormat::Float32x3,
 			.offset = 0,
 			.shaderLocation = 4,
 		};
 		static WGPUVertexBufferLayout tangentLayout = {
-			.arrayStride = sizeof(vec4f),
+			.arrayStride = sizeof(vec3f),
 			.stepMode = wgpu::VertexStepMode::Vertex,
 			.attributeCount = 1,
 			.attributes = &tangentAttribute,
 		};
 
+		static WGPUVertexAttribute bitangentAttribute = {
+			.format = wgpu::VertexFormat::Float32x3,
+			.offset = 0,
+			.shaderLocation = 5,
+		};
+		static WGPUVertexBufferLayout bitangentLayout = {
+			.arrayStride = sizeof(vec3f),
+			.stepMode = wgpu::VertexStepMode::Vertex,
+			.attributeCount = 1,
+			.attributes = &bitangentAttribute,
+		};
+
 		static WGPUVertexAttribute texcoord2Attribute = {
 			.format = wgpu::VertexFormat::Float32x2,
 			.offset = 0,
-			.shaderLocation = 5,
+			.shaderLocation = 6,
 		};
 		static WGPUVertexBufferLayout texcoord2Layout = {
 			.arrayStride = sizeof(vec2f),
@@ -485,7 +588,7 @@ namespace detail{
 			.attributeCount = 1,
 			.attributes = &texcoord2Attribute,
 		};
-		static std::array<WGPUVertexBufferLayout, 6> bufferLayouts = {positionLayout, texcoordLayout, normalLayout, colorLayout, tangentLayout, texcoord2Layout};
+		static std::array<WGPUVertexBufferLayout, 7> bufferLayouts = {positionLayout, texcoordLayout, normalLayout, colorLayout, tangentLayout, bitangentLayout, texcoord2Layout};
 
 		if(shader.vertex_entry_point) {
 			pipelineDesc.vertex.bufferCount = bufferLayouts.size();
@@ -515,22 +618,22 @@ namespace detail{
 // #Begin/End Drawing
 //////////////////////////////////////////////////////////////////////
 
-std::array<WGPUBindGroupEntry, 18> enumerate_texture_bindings(wgpu_frame_state& frame, std::span<WAYLIB_NULLABLE(texture*), WAYLIB_TEXTURE_SLOT_COUNT> textures) {
+std::array<WGPUBindGroupEntry, 18> enumerate_texture_bindings(frame_state& frame, std::span<WAYLIB_NULLABLE(texture*), WAYLIB_TEXTURE_SLOT_COUNT> textures) {
 	static const texture& default_texture = *throw_if_null(get_default_texture(frame.state));
 	static const texture& default_cube_texture = *throw_if_null(get_default_cube_texture(frame.state));
 	static std::array<WGPUBindGroupEntry, 18> bindings = [] {
 		std::array<WGPUBindGroupEntry, 18> bindings = {WGPUBindGroupEntry{
-			.binding = 1,
+			.binding = 5,
 			.textureView = default_texture.view,
 		}, WGPUBindGroupEntry{
-			.binding = 2,
+			.binding = 6,
 			.sampler = default_texture.sampler,
 		}};
 		for(size_t i = 2; i < bindings.size(); i += 2) {
 			bindings[i + 0] = bindings[0];
-			bindings[i + 0].binding = i + 1;
+			bindings[i + 0].binding = i + 5;
 			bindings[i + 1] = bindings[1];
-			bindings[i + 1].binding = i + 2;
+			bindings[i + 1].binding = i + 6;
 		}
 		return bindings;
 	}();
@@ -549,18 +652,46 @@ std::array<WGPUBindGroupEntry, 18> enumerate_texture_bindings(wgpu_frame_state& 
 	return bindings;
 }
 
-void setup_default_bindings(wgpu_frame_state& frame) {
-	static std::array<WGPUBindGroupEntry, 19> bindings = [&frame]{
+WGPUBindGroupEntry default_material_data_binding_function(frame_state* frame, material* mat) {
+	return WGPUBindGroupEntry{
+		.binding = 1,
+		.buffer = get_zero_buffer(frame->state, WAYLIB_MATERIAL_DATA_SIZE),
+		.size = WAYLIB_MATERIAL_DATA_SIZE
+	};
+}
+
+void setup_default_bindings(frame_state& frame) {
+	static std::array<WGPUBindGroupEntry, 23> bindings = [&frame]{
 		size_t size = create_pipeline_globals(frame.state).min_buffer_size;
-		std::array<WGPUBindGroupEntry, 19> bindings{WGPUBindGroupEntry{
+		std::array<WGPUBindGroupEntry, 23> bindings{WGPUBindGroupEntry{
 			.binding = 0,
+			.buffer = get_zero_buffer(frame.state, size),
+			.offset = 0,
+			.size = size,
+		}, WGPUBindGroupEntry{
+			.binding = 1,
+			.buffer = get_zero_buffer(frame.state, size),
+			.offset = 0,
+			.size = size,
+		}, WGPUBindGroupEntry{
+			.binding = 2,
+			.buffer = get_zero_buffer(frame.state, size),
+			.offset = 0,
+			.size = size,
+		}, WGPUBindGroupEntry{
+			.binding = 3,
+			.buffer = get_zero_buffer(frame.state, size),
+			.offset = 0,
+			.size = size,
+		}, WGPUBindGroupEntry{
+			.binding = 4,
 			.buffer = get_zero_buffer(frame.state, size),
 			.offset = 0,
 			.size = size,
 		}};
 		auto null = std::array<WAYLIB_NULLABLE(texture*), WAYLIB_TEXTURE_SLOT_COUNT>{}; null.fill(nullptr);
 		std::array<WGPUBindGroupEntry, 18> textureBindings = enumerate_texture_bindings(frame, null);
-		std::move(textureBindings.begin(), textureBindings.end(), bindings.begin() + 1);
+		std::move(textureBindings.begin(), textureBindings.end(), bindings.begin() + 5);
 		return bindings;
 	}();
 	static wgpu::BindGroup defaultBindGroup = [&frame] {
@@ -578,7 +709,7 @@ void setup_default_bindings(wgpu_frame_state& frame) {
 	upload_utility_data(frame, {}, {}, {});
 }
 
-WAYLIB_OPTIONAL(wgpu_frame_state) begin_drawing_render_texture(wgpu_state state, WGPUTextureView render_texture, vec2i render_texture_dimensions, WAYLIB_OPTIONAL(color) clear_color /*= {}*/) WAYLIB_TRY {
+WAYLIB_OPTIONAL(frame_state) begin_drawing_render_texture(waylib_state state, WGPUTextureView render_texture, vec2i render_texture_dimensions, WAYLIB_OPTIONAL(color) clear_color /*= {}*/) WAYLIB_TRY {
 	static WGPUTextureViewDescriptor depthTextureViewDesc = {
 		.format = depth_texture_format,
 		.dimension = wgpu::TextureViewDimension::_2D,
@@ -604,6 +735,8 @@ WAYLIB_OPTIONAL(wgpu_frame_state) begin_drawing_render_texture(wgpu_state state,
 
 	// Create a command encoder for the draw call
 	wgpu::CommandEncoderDescriptor encoderDesc = {};
+	encoderDesc.label = "Waylib Render Command Encoder";
+	wgpu::CommandEncoder render_encoder = state.device.createCommandEncoder(encoderDesc);
 	encoderDesc.label = "Waylib Command Encoder";
 	wgpu::CommandEncoder encoder = state.device.createCommandEncoder(encoderDesc);
 
@@ -656,14 +789,14 @@ WAYLIB_OPTIONAL(wgpu_frame_state) begin_drawing_render_texture(wgpu_state state,
 	renderPassDesc.timestampWrites = nullptr;
 
 	// Create the render pass and end it immediately (we only clear the screen but do not draw anything)
-	wgpu::RenderPassEncoder renderPass = encoder.beginRenderPass(renderPassDesc);
+	wgpu::RenderPassEncoder renderPass = render_encoder.beginRenderPass(renderPassDesc);
 
-	wgpu_frame_state out = {state, render_texture, depthTexture, depthTextureView, encoder, renderPass, &finalizers};
+	frame_state out = {state, render_texture, depthTexture, depthTextureView, render_encoder, encoder, renderPass, &finalizers};
 	setup_default_bindings(out);
 	return out;
 } WAYLIB_CATCH({})
 
-WAYLIB_OPTIONAL(wgpu_frame_state) begin_drawing(wgpu_state state, WAYLIB_OPTIONAL(color) clear_color /*= {}*/) WAYLIB_TRY {
+WAYLIB_OPTIONAL(frame_state) begin_drawing(waylib_state state, WAYLIB_OPTIONAL(color) clear_color /*= {}*/) WAYLIB_TRY {
 	// Get the surface texture
 	wgpu::SurfaceTexture surfaceTexture;
 	state.surface.getCurrentTexture(&surfaceTexture);
@@ -685,37 +818,47 @@ WAYLIB_OPTIONAL(wgpu_frame_state) begin_drawing(wgpu_state state, WAYLIB_OPTIONA
 	return begin_drawing_render_texture(state, texture.createView(viewDescriptor), {texture.getWidth(), texture.getHeight()}, clear_color);
 } WAYLIB_CATCH({})
 
-void end_drawing(wgpu_frame_state& frame) WAYLIB_TRY {
+static std::thread submit_thread;
+void end_drawing(frame_state& frame) WAYLIB_TRY {
 	frame.render_pass.end();
 	frame.render_pass.release();
 
 	// Finally encode and submit the render pass
 	wgpu::CommandBufferDescriptor cmdBufferDescriptor = {};
 	cmdBufferDescriptor.label = "Waylib Frame Command buffer";
-	wgpu::CommandBuffer command = frame.encoder.finish(cmdBufferDescriptor);
-	frame.encoder.release();
+	wgpu::CommandBuffer render_commands = frame.render_encoder.finish(cmdBufferDescriptor);
+	wgpu::CommandBuffer commands = frame.encoder.finish(cmdBufferDescriptor);
+	frame.render_encoder.release(); frame.encoder.release();
 
 	// std::cout << "Submitting command..." << std::endl;
-	frame.state.device.getQueue().submit(1, &command);
-	command.release();
-	// std::cout << "Command submitted." << std::endl;
+	if(submit_thread.joinable()) submit_thread.join();
+	submit_thread = std::thread([commands, render_commands, &frame]{
+		frame.state.device.getQueue().submit(std::vector<WGPUCommandBuffer>{commands, render_commands});
+		((wgpu::CommandBuffer*)&commands)->release();
+		((wgpu::CommandBuffer*)&render_commands)->release();
+	});
 } WAYLIB_CATCH()
-void end_drawing(wgpu_frame_state* frame) { end_drawing(*frame); }
+void end_drawing(frame_state* frame) { end_drawing(*frame); }
 
-void present_frame(wgpu_frame_state& frame) WAYLIB_TRY {
+void present_frame(frame_state& frame) WAYLIB_TRY {
+	if(submit_thread.joinable()) submit_thread.join();
+
+	// Call all of the finalizers // TODO: Slower than calling after present?
+	auto finalizers = std::move(*frame.finalizers);
+	auto finalizer_thread = std::thread([finalizers = std::move(finalizers)] {
+		for(auto& finalizer: finalizers)
+			finalizer();
+	});
+
 #ifndef __EMSCRIPTEN__
 	frame.state.surface.present();
 #endif
 
-	// Call all of the finalizers
-	for(auto& finalizer: *frame.finalizers)
-		finalizer();
-	frame.finalizers->clear();
-
 	// Process callbacks
 	process_wgpu_events(frame.state.device);
+	finalizer_thread.join();
 } WAYLIB_CATCH()
-void present_frame(wgpu_frame_state* frame) { present_frame(*frame); }
+void present_frame(frame_state* frame) { present_frame(*frame); }
 
 //////////////////////////////////////////////////////////////////////
 // #Camera
@@ -755,7 +898,7 @@ mat4x4f camera2D_get_matrix(camera2D& camera, vec2i window_dimensions) {
 }
 mat4x4f camera2D_get_matrix(camera2D* camera, vec2i window_dimensions) { return camera2D_get_matrix(*camera, window_dimensions); }
 
-void begin_camera_mode3D(wgpu_frame_state& frame, camera3D& camera, vec2i window_dimensions, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) WAYLIB_TRY {
+void begin_camera_mode3D(frame_state& frame, camera3D& camera, vec2i window_dimensions, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) WAYLIB_TRY {
 	camera_upload_data data {
 		.is_3D = true,
 		.settings3D = camera,
@@ -764,11 +907,11 @@ void begin_camera_mode3D(wgpu_frame_state& frame, camera3D& camera, vec2i window
 	std::tie(data.get_view_matrix(), data.get_projection_matrix()) = camera3D_get_matrix_impl(camera, window_dimensions);
 	upload_utility_data(frame, data, lights, frame_time);
 } WAYLIB_CATCH()
-void begin_camera_mode3D(wgpu_frame_state* frame, camera3D* camera, vec2i window_dimensions, light* lights /*= nullptr*/, size_t light_count /*=0*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) {
+void begin_camera_mode3D(frame_state* frame, camera3D* camera, vec2i window_dimensions, light* lights /*= nullptr*/, size_t light_count /*=0*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) {
 	begin_camera_mode3D(*frame, *camera, window_dimensions, {lights, light_count}, frame_time);
 }
 
-void begin_camera_mode2D(wgpu_frame_state& frame, camera2D& camera, vec2i window_dimensions, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) WAYLIB_TRY {
+void begin_camera_mode2D(frame_state& frame, camera2D& camera, vec2i window_dimensions, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) WAYLIB_TRY {
 	camera_upload_data data {
 		.is_3D = true,
 		.settings2D = camera,
@@ -777,11 +920,11 @@ void begin_camera_mode2D(wgpu_frame_state& frame, camera2D& camera, vec2i window
 	std::tie(data.get_view_matrix(), data.get_projection_matrix()) = camera2D_get_matrix_impl(camera, window_dimensions);
 	upload_utility_data(frame, data, lights, frame_time);
 } WAYLIB_CATCH()
-void begin_camera_mode2D(wgpu_frame_state* frame, camera2D* camera, vec2i window_dimensions, light* lights /*= nullptr*/, size_t light_count /*=0*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) {
+void begin_camera_mode2D(frame_state* frame, camera2D* camera, vec2i window_dimensions, light* lights /*= nullptr*/, size_t light_count /*=0*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) {
 	begin_camera_mode2D(*frame, *camera, window_dimensions, {lights, light_count}, frame_time);
 }
 
-void begin_camera_mode_identity(wgpu_frame_state& frame, vec2i window_dimensions, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) WAYLIB_TRY {
+void begin_camera_mode_identity(frame_state& frame, vec2i window_dimensions, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) WAYLIB_TRY {
 	camera_upload_data data {
 		.is_3D = false,
 		.settings3D = {},
@@ -791,15 +934,15 @@ void begin_camera_mode_identity(wgpu_frame_state& frame, vec2i window_dimensions
 	data.get_projection_matrix() = data.get_view_matrix() = glm::identity<glm::mat4x4>();
 	upload_utility_data(frame, data, lights, frame_time);
 } WAYLIB_CATCH()
-void begin_camera_mode_identity(wgpu_frame_state* frame, vec2i window_dimensions, light* lights /*= nullptr*/, size_t light_count /*=0*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) {
+void begin_camera_mode_identity(frame_state* frame, vec2i window_dimensions, light* lights /*= nullptr*/, size_t light_count /*=0*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) {
 	begin_camera_mode_identity(*frame, window_dimensions);
 }
 
-void end_camera_mode(wgpu_frame_state& frame) {
+void reset_camera_mode(frame_state& frame) {
 	begin_camera_mode_identity(frame, vec2i(0), {}, {});
 }
-void end_camera_mode(wgpu_frame_state* frame) {
-	end_camera_mode(*frame);
+void reset_camera_mode(frame_state* frame) {
+	reset_camera_mode(*frame);
 }
 #endif // WAYLIB_NO_CAMERAS
 
@@ -807,19 +950,112 @@ void end_camera_mode(wgpu_frame_state* frame) {
 // #Mesh
 //////////////////////////////////////////////////////////////////////
 
-void mesh_upload(wgpu_state state, mesh& mesh) WAYLIB_TRY {
+constexpr static auto getIndex = [](const struct mesh& mesh, const int triangleID, const int vertID) -> index_t {
+	if(mesh.indices)
+		return mesh.indices[triangleID * 3 + vertID];
+	else return triangleID * 3 + vertID;
+};
+
+void mesh_generate_normals(mesh& mesh, bool weighted_normals /*= false*/) WAYLIB_TRY {
+	if(mesh.normals && mesh.heap_allocated) delete mesh.normals;
+	mesh.normals = new vec3f[mesh.vertexCount];
+	std::fill(mesh.normals, mesh.normals + mesh.vertexCount, vec3f(0));
+
+	for(size_t i = 0; i < mesh.triangleCount; ++i) {
+		vec3u verts(getIndex(mesh, i, 0), getIndex(mesh, i, 1), getIndex(mesh, i, 2));
+		vec3f x = mesh.positions[verts.x];
+		vec3f y = mesh.positions[verts.y];
+		vec3f z = mesh.positions[verts.z];
+
+		vec3f xy = y - x;
+		vec3f xz = z - x;
+		vec3f n = cross(xy, xz);
+		if(!weighted_normals) n = normalize(n); // Weighted normals gives more importance to larger triangles
+
+		mesh.normals[verts.x] += n;
+		mesh.normals[verts.y] += n;
+		mesh.normals[verts.z] += n;
+	}
+
+	for(size_t i = 0; i < mesh.vertexCount; ++i)
+		mesh.normals[i] = normalize(mesh.normals[i]);
+} WAYLIB_CATCH()
+void mesh_generate_normals(mesh* mesh, bool weighted_normals /*= false*/) { mesh_generate_normals(*mesh, weighted_normals); }
+
+void mesh_generate_tangents(mesh& mesh) WAYLIB_TRY {
+	constexpr static auto getNumFaces = +[](const SMikkTSpaceContext* pContext) -> int {
+		const struct mesh& mesh = *(struct mesh*)pContext->m_pUserData;
+		return mesh.triangleCount;
+	};
+	constexpr static auto getNumVerticesOfFace = +[](const SMikkTSpaceContext * pContext, const int iFace) -> int {
+		return 3;
+	};
+	constexpr static auto getPosition = +[](const SMikkTSpaceContext* pContext, float fvPosOut[], const int iFace, const int iVert) {
+		const struct mesh& mesh = *(struct mesh*)pContext->m_pUserData;
+		auto& pos = mesh.positions[getIndex(mesh, iFace, iVert)];
+		fvPosOut[0] = pos.x;
+		fvPosOut[1] = pos.y;
+		fvPosOut[2] = pos.z;
+	};
+	constexpr static auto getNormal = +[](const SMikkTSpaceContext* pContext, float fvPosOut[], const int iFace, const int iVert) {
+		const struct mesh& mesh = *(struct mesh*)pContext->m_pUserData;
+		auto& norm = mesh.normals[getIndex(mesh, iFace, iVert)];
+		fvPosOut[0] = norm.x;
+		fvPosOut[1] = norm.y;
+		fvPosOut[2] = norm.z;
+	};
+	constexpr static auto getTexCoord = +[](const SMikkTSpaceContext* pContext, float fvPosOut[], const int iFace, const int iVert) {
+		const struct mesh& mesh = *(struct mesh*)pContext->m_pUserData;
+		auto& uvs = mesh.uvs[getIndex(mesh, iFace, iVert)];
+		fvPosOut[0] = uvs.x;
+		fvPosOut[1] = uvs.y;
+	};
+	constexpr static auto setTangent = +[](const SMikkTSpaceContext* pContext, const float fvTangent[], const float fSign, const int iFace, const int iVert) {
+		struct mesh& mesh = *(struct mesh*)pContext->m_pUserData;
+		size_t i = getIndex(mesh, iFace, iVert);
+		mesh.bitangents[i] = fSign * cross(mesh.normals[i], mesh.tangents[i] = vec3f(fvTangent[0], fvTangent[1], fvTangent[2]));
+	};
+
+	if(!mesh.normals) mesh_generate_normals(mesh);
+
+	if(mesh.tangents && mesh.heap_allocated) delete mesh.tangents;
+	if(mesh.bitangents && mesh.heap_allocated) delete mesh.bitangents;
+	mesh.tangents = new vec3f[mesh.vertexCount];
+	mesh.bitangents = new vec3f[mesh.vertexCount];
+
+	SMikkTSpaceInterface i{
+		.m_getNumFaces = getNumFaces,
+		.m_getNumVerticesOfFace = getNumVerticesOfFace,
+		.m_getPosition = getPosition,
+		.m_getNormal = getNormal,
+		.m_getTexCoord = getTexCoord,
+		.m_setTSpaceBasic = setTangent,
+		.m_setTSpace = nullptr
+	};
+	SMikkTSpaceContext c {
+		.m_pInterface = &i,
+		.m_pUserData = &mesh
+	};
+	genTangSpaceDefault(&c);
+} WAYLIB_CATCH()
+void mesh_generate_tangents(mesh *mesh) { mesh_generate_tangents(*mesh); }
+
+
+void mesh_upload(waylib_state state, mesh& mesh) WAYLIB_TRY {
+	static WGPUBufferDescriptor bufferDesc = {
+		.label = "Waylib Vertex Buffer",
+		.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::CopySrc | wgpu::BufferUsage::Vertex | wgpu::BufferUsage::Storage,
+		// .size = mesh.vertexCount * WAYLIB_MESH_VERTEX_SIZE,
+		.mappedAtCreation = true
+	};
+
+	if(mesh.uvs && !mesh.tangents) mesh_generate_tangents(mesh);
+
 	size_t biggest = std::max(mesh.vertexCount * sizeof(vec4f), mesh.triangleCount * sizeof(index_t) * 3);
 	std::vector<std::byte> zeroBuffer(biggest, std::byte{});
 
-	wgpu::BufferDescriptor bufferDesc;
-	bufferDesc.label = "Waylib Vertex Buffer";
-	bufferDesc.size = mesh.vertexCount * sizeof(vec2f) * 2
-		+ mesh.vertexCount * sizeof(vec3f) * 2
-		+ mesh.vertexCount * sizeof(vec4f) * 1
-		+ mesh.vertexCount * sizeof(color) * 1;
-	bufferDesc.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Vertex; // Vertex usage here!
-	bufferDesc.mappedAtCreation = false;
 	if(mesh.buffer) mesh.buffer.release();
+	bufferDesc.size = mesh.vertexCount * WAYLIB_MESH_VERTEX_SIZE;
 	mesh.buffer = state.device.createBuffer(bufferDesc);
 
 	// Upload geometry data to the buffer
@@ -827,47 +1063,65 @@ void mesh_upload(wgpu_state state, mesh& mesh) WAYLIB_TRY {
 	wgpu::Queue queue = state.device.getQueue();
 	{ // Position
 		void* data = mesh.positions ? (void*)mesh.positions : (void*)zeroBuffer.data();
-		queue.writeBuffer(mesh.buffer, currentOffset, data, mesh.vertexCount * sizeof(vec3f));
+		memcpy(mesh.buffer.getMappedRange(currentOffset, mesh.vertexCount * sizeof(vec3f)), data, mesh.vertexCount * sizeof(vec3f));
+		// queue.writeBuffer(mesh.buffer, currentOffset, data, mesh.vertexCount * sizeof(vec3f));
 		currentOffset += mesh.vertexCount * sizeof(vec3f);
 	}
-	{ // Texcoords
-		void* data = mesh.texcoords ? (void*)mesh.texcoords : (void*)zeroBuffer.data();
-		queue.writeBuffer(mesh.buffer, currentOffset, data, mesh.vertexCount * sizeof(vec2f));
+	{ // uvs
+		void* data = mesh.uvs ? (void*)mesh.uvs : (void*)zeroBuffer.data();
+		memcpy(mesh.buffer.getMappedRange(currentOffset, mesh.vertexCount * sizeof(vec2f)), data, mesh.vertexCount * sizeof(vec2f));
+		// queue.writeBuffer(mesh.buffer, currentOffset, data, mesh.vertexCount * sizeof(vec2f));
 		currentOffset += mesh.vertexCount * sizeof(vec2f);
 	}
-	{ // Texcoords2
-		void* data = mesh.texcoords2 ? (void*)mesh.texcoords2 : (void*)zeroBuffer.data();
-		queue.writeBuffer(mesh.buffer, currentOffset, data, mesh.vertexCount * sizeof(vec2f));
+	{ // uvs2
+		void* data = mesh.uvs2 ? (void*)mesh.uvs2 : (void*)zeroBuffer.data();
+		memcpy(mesh.buffer.getMappedRange(currentOffset, mesh.vertexCount * sizeof(vec2f)), data, mesh.vertexCount * sizeof(vec2f));
+		// queue.writeBuffer(mesh.buffer, currentOffset, data, mesh.vertexCount * sizeof(vec2f));
 		currentOffset += mesh.vertexCount * sizeof(vec2f);
 	}
 	{ // Normals
 		void* data = mesh.normals ? (void*)mesh.normals : (void*)zeroBuffer.data();
-		queue.writeBuffer(mesh.buffer, currentOffset, data, mesh.vertexCount * sizeof(vec3f));
+		memcpy(mesh.buffer.getMappedRange(currentOffset, mesh.vertexCount * sizeof(vec3f)), data, mesh.vertexCount * sizeof(vec3f));
+		// queue.writeBuffer(mesh.buffer, currentOffset, data, mesh.vertexCount * sizeof(vec3f));
 		currentOffset += mesh.vertexCount * sizeof(vec3f);
 	}
 	{ // Tangents
 		void* data = mesh.tangents ? (void*)mesh.tangents : (void*)zeroBuffer.data();
-		queue.writeBuffer(mesh.buffer, currentOffset, data, mesh.vertexCount * sizeof(vec4f));
-		currentOffset += mesh.vertexCount * sizeof(vec4f);
+		memcpy(mesh.buffer.getMappedRange(currentOffset, mesh.vertexCount * sizeof(vec3f)), data, mesh.vertexCount * sizeof(vec3f));
+		// queue.writeBuffer(mesh.buffer, currentOffset, data, mesh.vertexCount * sizeof(vec3f));
+		currentOffset += mesh.vertexCount * sizeof(vec3f);
+	}
+	{ // BiTangents
+		void* data = mesh.bitangents ? (void*)mesh.bitangents : (void*)zeroBuffer.data();
+		memcpy(mesh.buffer.getMappedRange(currentOffset, mesh.vertexCount * sizeof(vec3f)), data, mesh.vertexCount * sizeof(vec3f));
+		// queue.writeBuffer(mesh.buffer, currentOffset, data, mesh.vertexCount * sizeof(vec3f));
+		currentOffset += mesh.vertexCount * sizeof(vec3f);
 	}
 	{ // Colors
 		void* data = mesh.colors ? (void*)mesh.colors : (void*)zeroBuffer.data();
-		queue.writeBuffer(mesh.buffer, currentOffset, data, mesh.vertexCount * sizeof(color));
+		memcpy(mesh.buffer.getMappedRange(currentOffset, mesh.vertexCount * sizeof(color)), data, mesh.vertexCount * sizeof(color));
+		// queue.writeBuffer(mesh.buffer, currentOffset, data, mesh.vertexCount * sizeof(color));
 		currentOffset += mesh.vertexCount * sizeof(color);
 	}
+	mesh.buffer.unmap(); // Finished copying data
 	if(mesh.indices) {
-		wgpu::BufferDescriptor bufferDesc;
-		bufferDesc.label = "Vertex Position Buffer";
-		bufferDesc.size = mesh.triangleCount * sizeof(index_t) * 3;
-		bufferDesc.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Index;
-		bufferDesc.mappedAtCreation = false;
+		static WGPUBufferDescriptor bufferDesc {
+			.label = "Vertex Position Buffer",
+			.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Index | wgpu::BufferUsage::Storage,
+			// .size = mesh.triangleCount * sizeof(index_t) * 3,
+			.mappedAtCreation = false
+		};
+
 		if(mesh.indexBuffer) mesh.indexBuffer.release();
+		bufferDesc.size = mesh.triangleCount * sizeof(index_t) * 3;
 		mesh.indexBuffer = state.device.createBuffer(bufferDesc);
 
 		queue.writeBuffer(mesh.indexBuffer, 0, mesh.indices, mesh.triangleCount * sizeof(index_t) * 3);
+		// memcpy(mesh.indexBuffer.getMappedRange(0, bufferDesc.size), mesh.indices, mesh.triangleCount * sizeof(index_t) * 3);
+		// mesh.indexBuffer.unmap(); // Finished copying data
 	} else if(mesh.indexBuffer) mesh.indexBuffer.release();
 } WAYLIB_CATCH()
-void mesh_upload(wgpu_state state, mesh* mesh) {
+void mesh_upload(waylib_state state, mesh* mesh) {
 	mesh_upload(state, *mesh);
 }
 
@@ -878,7 +1132,7 @@ void release_mesh(mesh& mesh) {
 		if(mesh.uvs2) delete mesh.uvs2;
 		if(mesh.normals) delete mesh.normals;
 		if(mesh.tangents) delete mesh.tangents;
-		// if(mesh.bitangents) delete mesh.bitangents;
+		if(mesh.bitangents) delete mesh.bitangents;
 		if(mesh.colors) delete mesh.colors;
 		if(mesh.indices) delete mesh.indices;
 	}
@@ -892,9 +1146,9 @@ void release_mesh(mesh *mesh) { release_mesh(*mesh); }
 // #Material
 //////////////////////////////////////////////////////////////////////
 
-pipeline_globals& create_pipeline_globals(wgpu_state state); // Declared in waylib.cpp
+pipeline_globals& create_pipeline_globals(waylib_state state); // Declared in waylib.cpp
 
-void material_upload(wgpu_state state, material& material, material_configuration config /*= {}*/) WAYLIB_TRY {
+void material_upload(waylib_state state, material& material, material_configuration config /*= {}*/) WAYLIB_TRY {
 	// Create the render pipeline
 	wgpu::RenderPipelineDescriptor pipelineDesc;
 	wgpu::FragmentState fragment;
@@ -922,7 +1176,7 @@ void material_upload(wgpu_state state, material& material, material_configuratio
 	// But the face orientation does not matter much because we do not
 	// cull (i.e. "hide") the faces pointing away from us (which is often
 	// used for optimization).
-	pipelineDesc.primitive.cullMode = wgpu::CullMode::None; // = wgpu::CullMode::Back;
+	pipelineDesc.primitive.cullMode = config.double_sided ? wgpu::CullMode::None : wgpu::CullMode::Back;
 
 	// We setup a depth buffer state for the render pipeline
 	wgpu::DepthStencilState depthStencilState = wgpu::Default;
@@ -949,42 +1203,129 @@ void material_upload(wgpu_state state, material& material, material_configuratio
 	if(material.pipeline) material.pipeline.release();
 	material.pipeline = state.device.createRenderPipeline(pipelineDesc);
 } WAYLIB_CATCH()
-void material_upload(wgpu_state state, material* material, material_configuration config /*= {}*/) {
+void material_upload(waylib_state state, material* material, material_configuration config /*= {}*/) {
 	material_upload(state, *material, config);
 }
 
-void release_material(material& material, bool release_textures /*= true*/, bool release_shaders /*= true*/) {
+void release_material(material& material, bool release_textures /*= true*/, bool release_shaders /*= true*/, bool release_transformer /*= true*/) {
 	if(release_shaders) for(auto& shader: material.get_shaders())
 		release_shader(shader);
 	if(release_textures) for(auto& texture: material.get_textures())
 		if(texture) release_texture(texture);
+	if(material.geometry_transformer) release_computer(material.geometry_transformer->computer);
+
 	material.pipeline.release(); // TODO: Fails?
 }
-void release_material(material *material) { release_material(*material); }
+void release_material(material *material, bool release_textures /*= true*/, bool release_shaders /*= true*/, bool release_transformer /*= true*/) { release_material(*material); }
 
-material create_material(wgpu_state state, shader* shaders, size_t shader_count, material_configuration config /*= {}*/) {
+material create_material(waylib_state state, shader* shaders, size_t shader_count, material_configuration config /*= {}*/) {
 	material out {.shaderCount = (index_t)shader_count, .shaders = shaders};
 	material_upload(state, out, config);
+	out.material_data_binding_function = default_material_data_binding_function;
 	return out;
 }
-material create_material(wgpu_state state, std::span<shader> shaders, material_configuration config /*= {}*/) {
+material create_material(waylib_state state, std::span<shader> shaders, material_configuration config /*= {}*/) {
 	return create_material(state, shaders.data(), shaders.size(), config);
 }
-material create_material(wgpu_state state, shader& shader, material_configuration config /*= {}*/) {
+material create_material(waylib_state state, shader& shader, material_configuration config /*= {}*/) {
 	return create_material(state, &shader, 1, config);
+}
+
+wgpu::BindGroupEntry pbr_material_default_data_binding_function(frame_state& frame, material& _mat) {
+	static WGPUBufferDescriptor bufferDesc = {
+		.label = "Waylib PBR Buffer",
+		.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform,
+		.size = WAYLIB_MATERIAL_DATA_SIZE,
+		.mappedAtCreation = false,
+	};
+	pbr_material& mat = *(pbr_material*)&_mat;
+
+	wgpu::Buffer pbrBuffer = frame.state.device.createBuffer(bufferDesc); frame_defer(frame) { pbrBuffer.destroy(); pbrBuffer.release(); };
+	frame.state.device.getQueue().writeBuffer(pbrBuffer, 0, &mat.color, WAYLIB_MATERIAL_DATA_SIZE);
+	// std::memcpy(pbrBuffer.getMappedRange(0, WAYLIB_MATERIAL_DATA_SIZE), &mat.color, WAYLIB_MATERIAL_DATA_SIZE);
+	// pbrBuffer.unmap();
+
+	return WGPUBindGroupEntry{
+		.binding = 1,
+		.buffer = pbrBuffer,
+		.size = WAYLIB_MATERIAL_DATA_SIZE
+	};
+}
+
+pbr_material create_pbr_material(waylib_state state, std::span<shader> shaders, std::span<WAYLIB_NULLABLE(texture*)> textures /*= {}*/, material_configuration config /*= {}*/) {
+	assert(textures.size() <= WAYLIB_TEXTURE_SLOT_COUNT);
+	pbr_material mat = (pbr_material)create_material(state, shaders, config);
+	material_set_data_binding_function(mat, pbr_material_default_data_binding_function);
+	for(size_t i = 0; i < textures.size(); i++) {
+		mat.textures[i] = textures[i];
+		if(textures[i]) switch((texture_slot)i) {
+			break; case texture_slot::Color: mat.use_color_map = true;
+			break; case texture_slot::Cubemap: mat.use_environment_map = true;
+			break; case texture_slot::Height: mat.use_height_map = true;
+			break; case texture_slot::Normal: mat.use_normal_map = true;
+			break; case texture_slot::PackedMap: mat.use_packed_map = true;
+			break; case texture_slot::Roughness: if(!mat.use_packed_map) mat.use_roughness_map = true;
+			break; case texture_slot::Metalness: if(!mat.use_packed_map) mat.use_metalness_map = true;
+			break; case texture_slot::AmbientOcclusion: if(!mat.use_packed_map) mat.use_ambient_occlusion_map = true;
+			break; case texture_slot::Emission: mat.use_emission_map = true;
+			break; default: {}
+		}
+	}
+	return mat;
+}
+pbr_material create_pbr_material(waylib_state state, shader* shaders, size_t shader_count, WAYLIB_NULLABLE(texture*)* textures /*= nullptr*/, size_t texture_count /*= 0*/, material_configuration config /*= {}*/) {
+	return create_pbr_material(state, {shaders, shader_count}, {textures, texture_count}, config);
+}
+pbr_material create_pbr_material(waylib_state state, shader& shader, std::span<WAYLIB_NULLABLE(texture*)> textures /*= {}*/, material_configuration config /*= {}*/) {
+	return create_pbr_material(state, {&shader, 1}, textures, config);
+}
+
+WAYLIB_OPTIONAL(pbr_material) create_default_pbr_material(waylib_state state, std::span<WAYLIB_NULLABLE(texture*)> textures /*= {}*/, material_configuration config /*= {}*/) WAYLIB_TRY {
+	constexpr static const char* shaderSource =
+#include "shaders/defaults/pbr.wgsl"
+	;
+	constexpr static const char* geometryShaderSource =
+#include "shaders/defaults/pbr.displacement.wgsl"
+	;
+
+	bool free_preprocessor = false;
+	if(!config.preprocessor) {
+		config.preprocessor = preprocessor_initialize_virtual_filesystem(create_shader_preprocessor(), state);
+		free_preprocessor = true;
+	}
+
+	auto shader = create_shader(state, shaderSource,
+		{.vertex_entry_point = "waylib_default_vertex_shader", .fragment_entry_point = "waylib_default_fragment_shader", .name = "Waylib Default PBR Shader", .preprocessor = config.preprocessor}
+	);
+	if(!shader.has_value) {
+		if(free_preprocessor) release_shader_preprocessor(config.preprocessor);
+		return {};
+	}
+
+	auto mat = create_pbr_material(state, shader.value, textures, config);
+	if(textures.size() > (size_t)texture_slot::Height && textures[(size_t)texture_slot::Height]) { // should enable displacement?
+		static geometry_transformation_shader transformer = throw_if_null(create_geometry_transformation_shader(state, geometryShaderSource, true, {.name = "Waylib Default PBR Displacemant Shader", .preprocessor = config.preprocessor}));
+		mat.geometry_transformer = &transformer;
+	}
+
+	if(free_preprocessor) release_shader_preprocessor(config.preprocessor);
+	return mat;
+} WAYLIB_CATCH({})
+WAYLIB_OPTIONAL(pbr_material) create_default_pbr_material(waylib_state state, WAYLIB_NULLABLE(texture*)* textures, size_t texture_count, material_configuration config /*= {}*/) {
+	return create_default_pbr_material(state, {textures, texture_count}, config);
 }
 
 //////////////////////////////////////////////////////////////////////
 // #Model
 //////////////////////////////////////////////////////////////////////
 
-void model_upload(wgpu_state state, model& model) {
+void model_upload(waylib_state state, model& model) {
 	for(size_t i = 0; i < model.mesh_count; ++i)
 		mesh_upload(state, model.meshes[i]);
 	// for(size_t i = 0; i < model.material_count; ++i) // TODO: How do we handle material configurations?
 	// 	material_upload(state, model.materials[i]);
 }
-void model_upload(wgpu_state state, model* model) {
+void model_upload(waylib_state state, model* model) {
 	model_upload(state, *model);
 }
 
@@ -993,24 +1334,52 @@ void release_model(model& model, bool release_meshes /*= true*/, bool release_ma
 		release_mesh(mesh);
 	if(release_materials) for(auto& material: model.get_materials())
 		release_material(material, release_textures, release_shaders);
-	
+
 	if(model.heap_allocated) delete model.bones;
 	// TODO: Other things need deleting?
 }
 void release_model(model* model) { release_model(*model); }
 
-void model_draw_instanced(wgpu_frame_state& frame, model& model, std::span<model_instance_data> instances) WAYLIB_TRY {
-	static WGPUBufferDescriptor bufferDesc = {
+#define WAYLIB_RELEASE_WAYLIB_BUFFER_AT_FRAME_END(frame, buffer) frame.finalizers->emplace_back([buffer]() mutable { buffer.data.destroy(); buffer.data.release(); })
+
+void model_draw_instanced(frame_state& frame, model& model, std::span<model_instance_data> instances) WAYLIB_TRY {
+	static WGPUBufferDescriptor instanceBufferDesc = {
 		.label = "Waylib Instance Buffer",
 		.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Storage,
 		.size = sizeof(model_instance_data),
 		.mappedAtCreation = false,
 	};
-	static std::array<WGPUBindGroupEntry, 19> bindings = {WGPUBindGroupEntry{
+	static WGPUBufferDescriptor meshDataBufferDesc = {
+		.label = "Waylib Mesh Data Buffer",
+		.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Storage,
+		.size = sizeof(mesh_metadata),
+		.mappedAtCreation = false,
+	};
+	static std::array<WGPUBindGroupEntry, 23> bindings = {WGPUBindGroupEntry{
 		.binding = 0,
-		.buffer = get_zero_buffer(frame.state, bufferDesc.size),
+		.buffer = get_zero_buffer(frame.state, instanceBufferDesc.size),
 		.offset = 0,
 		.size = sizeof(model_instance_data) * instances.size(),
+	}, WGPUBindGroupEntry{
+		.binding = 1,
+		.buffer = get_zero_buffer(frame.state, WAYLIB_MATERIAL_DATA_SIZE),
+		.offset = 0,
+		.size = WAYLIB_MATERIAL_DATA_SIZE
+	}, WGPUBindGroupEntry{
+		.binding = 2,
+		.buffer = get_zero_buffer(frame.state, sizeof(mesh_metadata)),
+		.offset = 0,
+		.size = sizeof(mesh_metadata),
+	}, WGPUBindGroupEntry{
+		.binding = 3,
+		.buffer = get_zero_buffer(frame.state, WAYLIB_MESH_VERTEX_SIZE),
+		.offset = 0,
+		.size = WAYLIB_MESH_VERTEX_SIZE,
+	}, WGPUBindGroupEntry{
+		.binding = 4,
+		.buffer = get_zero_buffer(frame.state, sizeof(index_t) * 3),
+		.offset = 0,
+		.size = sizeof(index_t) * 3,
 	}};
 	static WGPUBindGroupDescriptor bindGroupDesc {
 		.label = "Waylib Per Model Bind Group",
@@ -1020,8 +1389,10 @@ void model_draw_instanced(wgpu_frame_state& frame, model& model, std::span<model
 	};
 
 	if(instances.size() > 0) {
-		bufferDesc.size = sizeof(model_instance_data) * instances.size();
-		wgpu::Buffer instanceBuffer = frame.state.device.createBuffer(bufferDesc);
+		instanceBufferDesc.size = sizeof(model_instance_data) * instances.size();
+		wgpu::Buffer instanceBuffer = frame.state.device.createBuffer(instanceBufferDesc); frame_defer(frame) { instanceBuffer.destroy(); instanceBuffer.release(); };
+		// memcpy(instanceBuffer.getMappedRange(0, instanceBufferDesc.size), instances.data(), instanceBufferDesc.size);
+		// instanceBuffer.unmap();
 		frame.state.device.getQueue().writeBuffer(instanceBuffer, 0, instances.data(), sizeof(model_instance_data) * instances.size());
 		frame_defer(frame) { instanceBuffer.destroy(); instanceBuffer.release(); };
 
@@ -1038,56 +1409,126 @@ void model_draw_instanced(wgpu_frame_state& frame, model& model, std::span<model
 		frame.render_pass.setPipeline(mat.pipeline);
 		// Figure out which textures to use from the material
 		auto tex = enumerate_texture_bindings(frame, mat.get_textures());
-		std::move(tex.begin(), tex.end(), bindings.begin() + 1);
+		if(mat.material_data_binding_function)
+			bindings[1] = mat.material_data_binding_function(&frame, &mat);
+		std::move(tex.begin(), tex.end(), bindings.begin() + 5);
+
+		auto& mesh = model.meshes[i];
+		wgpu::Buffer vertexBuffer = mesh.buffer, indexBuffer = mesh.indexBuffer;
+		mesh_metadata metadata = mesh.get_metadata();
+		if(mat.geometry_transformer) {
+			constexpr static auto roundUpTo3 = [](size_t v){
+				int r = v % 3;
+				if (r == 0) return v;
+				return v + 3 - r;
+			};
+
+			size_t scaled_count = roundUpTo3(std::max(mesh.triangleCount, mesh.vertexCount) * mat.geometry_transformer->vertex_multiplier);
+			buffer vertexOutput {
+				.size = scaled_count * WAYLIB_MESH_VERTEX_SIZE,
+				.offset = 0,
+			};
+			buffer indexOutput {
+				.size = (indexBuffer ? roundUpTo3(mesh.triangleCount * mat.geometry_transformer->vertex_multiplier) : 0) * sizeof(index_t),
+				.offset = 0
+			};
+			upload_buffer(frame.state, vertexOutput, wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Vertex | wgpu::BufferUsage::Storage);
+			buffer_copy_record_existing(frame.encoder, vertexOutput, buffer{.size=vertexBuffer.getSize(), .offset=0, .data=vertexBuffer});
+			WAYLIB_RELEASE_WAYLIB_BUFFER_AT_FRAME_END(frame, vertexOutput);
+			if(indexBuffer) {
+				upload_buffer(frame.state, indexOutput, wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Index | wgpu::BufferUsage::Storage);
+				buffer_copy_record_existing(frame.encoder, indexOutput, buffer{.size=indexBuffer.getSize(), .offset=0, .data=indexBuffer});
+				WAYLIB_RELEASE_WAYLIB_BUFFER_AT_FRAME_END(frame, indexOutput);
+			}
+
+			buffer gpu_metadata_in = create_buffer(frame.state, metadata); WAYLIB_RELEASE_WAYLIB_BUFFER_AT_FRAME_END(frame, gpu_metadata_in); // TODO: Should be a uniform buffer?
+			// TODO: Scale output metadata here?
+			buffer gpu_metadata_out = create_buffer(frame.state, metadata); WAYLIB_RELEASE_WAYLIB_BUFFER_AT_FRAME_END(frame, gpu_metadata_out);
+
+			auto& computer = mat.geometry_transformer->computer;
+			computer.buffers[0] = gpu_metadata_in;
+			computer.buffers[1] = {.size = WAYLIB_MATERIAL_DATA_SIZE, .offset = 0, .data = bindings[1].buffer};
+			computer.buffers[2] = gpu_metadata_out;
+			computer.buffers[3] = {.size = static_cast<size_t>(vertexBuffer.getSize()), .offset = 0, .data = vertexBuffer};
+			computer.buffers[4] = vertexOutput;
+			if(indexBuffer) {
+				computer.buffers[5] = {.size = static_cast<size_t>(indexBuffer.getSize()), .offset = 0, .data = indexBuffer};
+				computer.buffers[6] = indexOutput;
+			} else {
+				// instanceBufferDesc.mappedAtCreation = false;
+				instanceBufferDesc.label = "Trash Buffer";
+				static wgpu::Buffer trashBufferIn = frame.state.device.createBuffer(instanceBufferDesc);
+				static wgpu::Buffer trashBufferOut = frame.state.device.createBuffer(instanceBufferDesc);
+				instanceBufferDesc.label = "Waylib Instance Buffer";
+				// instanceBufferDesc.mappedAtCreation = true;
+				computer.buffers[5] = {.size = static_cast<size_t>(trashBufferIn.getSize()), .offset = 0, .data = trashBufferIn};
+				computer.buffers[6] = {.size = static_cast<size_t>(trashBufferOut.getSize()), .offset = 0, .data = trashBufferOut};
+			}
+			for(size_t i = 0; i < WAYLIB_TEXTURE_SLOT_COUNT; ++i)
+				if(mat.textures[i])
+					computer.textures[i] = *mat.textures[i];
+				else computer.textures[i] = *get_default_texture(frame.state).value;
+
+			vec3u workgroups = mat.geometry_transformer->per_vertex_processing
+				? vec3u{roundUpTo3(mesh.vertexCount * mat.geometry_transformer->vertex_multiplier) / 64, 1, 1}
+				: vec3u{roundUpTo3(mesh.triangleCount * mat.geometry_transformer->vertex_multiplier * 3) / 64, 1, 1};
+			computer_record_existing(frame.state, frame.encoder, computer, workgroups);
+			if( !(!mat.geometry_transformer->force_vertex_count_sync && mat.geometry_transformer->vertex_multiplier == 1) ){ // If vertex count likely changed... we need to sync the new count
+				gpu_metadata_out.cpu_data = nullptr; // Prepare the buffer for downloading
+				buffer_download(frame.state, gpu_metadata_out);
+				metadata = *(mesh_metadata*)gpu_metadata_out.cpu_data;
+			}
+
+			vertexBuffer = vertexOutput.data;
+			if(indexBuffer) indexBuffer = indexOutput.data;
+		}
+
+		// Bind the mesh data buffer
+		wgpu::Buffer meshDataBuffer = frame.state.device.createBuffer(meshDataBufferDesc); frame_defer(frame) { meshDataBuffer.destroy(); meshDataBuffer.release(); };
+		// memcpy(meshDataBuffer.getMappedRange(0, meshDataBufferDesc.size), &metadata, meshDataBufferDesc.size);
+		frame.state.device.getQueue().writeBuffer(meshDataBuffer, 0, &metadata, meshDataBufferDesc.size);
+		bindings[2].buffer = meshDataBuffer;
+		// meshDataBuffer.unmap();
+		// Bind raw access to the vertex and index buffers
+		bindings[3].buffer = vertexBuffer;
+		bindings[4].buffer = indexBuffer ? indexBuffer : get_zero_buffer(frame.state, sizeof(index_t) * 3);
 
 		// Bind the instance and texture buffers
-		wgpu::BindGroup bindGroup = frame.state.device.createBindGroup(bindGroupDesc); frame_defer(frame) { bindGroup.release(); };
+		wgpu::BindGroup bindGroup = frame.state.device.createBindGroup(bindGroupDesc); //frame_defer(frame) { bindGroup.release(); };
 		frame.render_pass.setBindGroup(0, bindGroup, 0, nullptr);
 
-		size_t currentOffset = 0;
-		auto& mesh = model.meshes[i];
-		{ // Position
-			frame.render_pass.setVertexBuffer(0, mesh.buffer, currentOffset, mesh.vertexCount * sizeof(vec3f));
-			currentOffset += mesh.vertexCount * sizeof(vec3f);
-		}
-		{ // Texcoord
-			frame.render_pass.setVertexBuffer(1, mesh.buffer, currentOffset, mesh.vertexCount * sizeof(vec2f));
-			currentOffset += mesh.vertexCount * sizeof(vec2f);
-		}
-		{ // Texcoord 2
-			frame.render_pass.setVertexBuffer(5, mesh.buffer, currentOffset, mesh.vertexCount * sizeof(vec2f));
-			currentOffset += mesh.vertexCount * sizeof(vec2f);
-		}
-		{ // Normals
-			frame.render_pass.setVertexBuffer(2, mesh.buffer, currentOffset, mesh.vertexCount * sizeof(vec3f));
-			currentOffset += mesh.vertexCount * sizeof(vec3f);
-		}
-		{ // Tangents
-			frame.render_pass.setVertexBuffer(4, mesh.buffer, currentOffset, mesh.vertexCount * sizeof(vec4f));
-			currentOffset += mesh.vertexCount * sizeof(vec4f);
-		}
-		{ // Colors
-			frame.render_pass.setVertexBuffer(3, mesh.buffer, currentOffset, mesh.vertexCount * sizeof(color));
-			currentOffset += mesh.vertexCount * sizeof(color);
-		}
+		// Position
+		frame.render_pass.setVertexBuffer(0, vertexBuffer, metadata.position_start, metadata.vertex_count * sizeof(vec3f));
+		// Texcoord
+		frame.render_pass.setVertexBuffer(1, vertexBuffer, metadata.uvs_start, metadata.vertex_count * sizeof(vec2f));
+		// Texcoord 2
+		frame.render_pass.setVertexBuffer(6, vertexBuffer, metadata.uvs2_start, metadata.vertex_count * sizeof(vec2f));
+		// Normals
+		frame.render_pass.setVertexBuffer(2, vertexBuffer, metadata.normals_start, metadata.vertex_count * sizeof(vec3f));
+		// Tangents
+		frame.render_pass.setVertexBuffer(4, vertexBuffer, metadata.tangents_start, metadata.vertex_count * sizeof(vec3f));
+		// BiTangents
+		frame.render_pass.setVertexBuffer(5, vertexBuffer, metadata.bitangents_start, metadata.vertex_count * sizeof(vec3f));
+		// Colors
+		frame.render_pass.setVertexBuffer(3, vertexBuffer, metadata.colors_start, metadata.vertex_count * sizeof(color));
 
 		if(mesh.indexBuffer) {
-			frame.render_pass.setIndexBuffer(mesh.indexBuffer, calculate_index_format<index_t>(), 0, mesh.indexBuffer.getSize());
-			frame.render_pass.drawIndexed(mesh.triangleCount * 3, std::max<size_t>(instances.size(), 1), 0, 0, 0);
+			frame.render_pass.setIndexBuffer(indexBuffer, calculate_index_format<index_t>(), 0, metadata.triangle_count * 3 * sizeof(index_t));
+			frame.render_pass.drawIndexed(metadata.triangle_count * 3, std::max<size_t>(instances.size(), 1), 0, 0, 0);
 		} else
-			frame.render_pass.draw(model.meshes[i].vertexCount, std::max<size_t>(instances.size(), 1), 0, 0);
+			frame.render_pass.draw(metadata.vertex_count, std::max<size_t>(instances.size(), 1), 0, 0);
 	}
 } WAYLIB_CATCH()
-void model_draw_instanced(wgpu_frame_state* frame, model* model, model_instance_data* instances, size_t instance_count) {
+void model_draw_instanced(frame_state* frame, model* model, model_instance_data* instances, size_t instance_count) {
 	model_draw_instanced(*frame, *model, {instances, instance_count});
 }
 
-void model_draw(wgpu_frame_state& frame, model& model) {
+void model_draw(frame_state& frame, model& model) {
 	model_instance_data instance = {model.transform, {}, {1, 1, 1, 1}};
-	instance.get_inverse_transform() = glm::inverse(model.get_transform());
+	convert(instance.inverse_transform) = glm::inverse(convert(model.transform));
 	model_draw_instanced(frame, model, {&instance, 1});
 }
-void model_draw(wgpu_frame_state* frame, model* model) {
+void model_draw(frame_state* frame, model* model) {
 	model_draw(*frame, *model);
 }
 
@@ -1095,7 +1536,7 @@ void model_draw(wgpu_frame_state* frame, model* model) {
 // #Texture
 //////////////////////////////////////////////////////////////////////
 
-WAYLIB_OPTIONAL(texture) create_texture(wgpu_state state, vec2i dimensions, texture_config config /*= {}*/) {
+WAYLIB_OPTIONAL(texture) create_texture(waylib_state state, vec2i dimensions, texture_config config /*= {}*/) {
 	if(config.cubemap) assert(config.frames % 6 == 0); // Cubemaps need to have a multiple of 6 images
 
 	texture out{.cpu_data = nullptr, .heap_allocated = false};
@@ -1140,7 +1581,7 @@ WAYLIB_OPTIONAL(texture) create_texture(wgpu_state state, vec2i dimensions, text
 	return out;
 }
 
-WAYLIB_OPTIONAL(texture) create_texture_from_image(wgpu_state state, image& image, texture_config config /*= {}*/) {
+WAYLIB_OPTIONAL(texture) create_texture_from_image(waylib_state state, image& image, texture_config config /*= {}*/) {
 	config.float_data = image.float_data;
 	config.frames = image.frames;
 	config.mipmaps = image.mipmaps;
@@ -1167,10 +1608,10 @@ WAYLIB_OPTIONAL(texture) create_texture_from_image(wgpu_state state, image& imag
 	state.device.getQueue().writeTexture(destination, image.data, image.width * image.height * (image.float_data ? sizeof(color) : sizeof(color8)) * image.frames, source, size);
 	return out;
 }
-WAYLIB_OPTIONAL(texture) create_texture_from_image(wgpu_state state, image* image, texture_config config /*= {}*/) {
+WAYLIB_OPTIONAL(texture) create_texture_from_image(waylib_state state, image* image, texture_config config /*= {}*/) {
 	return create_texture_from_image(state, *image, config);
 }
-WAYLIB_OPTIONAL(texture) create_texture_from_image(wgpu_state state, WAYLIB_OPTIONAL(image)&& image, texture_config config /*= {}*/) {
+WAYLIB_OPTIONAL(texture) create_texture_from_image(waylib_state state, WAYLIB_OPTIONAL(image)&& image, texture_config config /*= {}*/) {
 	if(!image.has_value) return {};
 	auto imgPtr = new struct image(image.value);
 	imgPtr->heap_allocated = true;
@@ -1197,14 +1638,14 @@ image texture_not_found_image(size_t dimensions) {
 	return img;
 }
 
-WAYLIB_OPTIONAL(const texture*) get_default_texture(wgpu_state state) {
+WAYLIB_OPTIONAL(const texture*) get_default_texture(waylib_state state) {
 	static image image = texture_not_found_image(16);
 	static WAYLIB_OPTIONAL(texture) texture = create_texture_from_image(state, image, {.color_filter = wgpu::FilterMode::Nearest});
 
 	if(texture.has_value) return &texture.value;
 	return {};
 }
-WAYLIB_OPTIONAL(const texture*) get_default_cube_texture(wgpu_state state) {
+WAYLIB_OPTIONAL(const texture*) get_default_cube_texture(waylib_state state) {
 	static image image = [] {
 		std::array<WAYLIB_NAMESPACE_NAME::image, 6> faces; faces.fill(texture_not_found_image(16));
 		return merge_images(faces).value;

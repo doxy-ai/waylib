@@ -29,10 +29,13 @@ constexpr static WGPUTextureFormat depth_texture_format = wgpu::TextureFormat::D
 
 #include "common.h"
 
+color convert(const color8& c);
+color8 convert(const color& c);
+
 struct pipeline_globals {
 	bool created = false;
 	size_t min_buffer_size;
-	// Group 0 is Instance/"PBR" Texture Data
+	// Group 0 is Instance (B0)/Material (B1)/Raw Vertex(B2/3)/Texture Data
 	// Group 1 is Utility: Camera (B0) / Light (B1) / Time (B2) Data
 	std::array<WGPUBindGroupLayout, 2> bindGroupLayouts;
 	wgpu::PipelineLayout layout;
@@ -133,11 +136,16 @@ inline const char* cstring_from_view(const std::string_view view) {
 	return tmp.c_str();
 }
 
-color convert(const color8& c);
-color8 convert(const color& c);
-
 // Not recommended to be used directly!
-pipeline_globals& create_pipeline_globals(wgpu_state state);
+pipeline_globals& create_pipeline_globals(waylib_state state);
+
+template<typename F>
+void material_set_data_binding_function(material& mat, F _f) {
+	static F f = _f;
+	mat.material_data_binding_function = [](frame_state* frame, material* mat){
+		return (WGPUBindGroupEntry)f(*frame, *mat);
+	};
+}
 
 WAYLIB_NULLABLE(image_data_span<>) image_get_frame(
 	image& image,

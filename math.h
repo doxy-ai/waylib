@@ -13,6 +13,10 @@ typedef struct mat4x4f_ {
 	float d0, d1, d2, d3;
 } mat4x4f_;
 
+typedef struct vec4f_ {
+	float x, y, z, w;
+} vec4f_;
+
 // Define mathematical types used... in C++ they are provided by glm so we just prototype them here!
 #ifndef __cplusplus
 typedef struct vec2i {

@@ -29,7 +29,7 @@ window* create_window(
 
 #ifndef WAYLIB_NO_CAMERAS
 void window_begin_camera_mode3D(
-	wgpu_frame_state& frame,
+	frame_state& frame,
 	window* window,
 	camera3D& camera,
 	std::span<light> lights
@@ -43,7 +43,7 @@ void window_begin_camera_mode3D(
 );
 
 void window_begin_camera_mode2D(
-	wgpu_frame_state& frame,
+	frame_state& frame,
 	window* window,
 	camera2D& camera,
 	std::span<light> lights
@@ -57,7 +57,7 @@ void window_begin_camera_mode2D(
 );
 
 void window_begin_camera_mode_identity(
-	wgpu_frame_state& frame,
+	frame_state& frame,
 	window* window,
 	std::span<light> lights
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS

@@ -18,7 +18,7 @@ struct vertex_output {
 };
 
 @vertex
-fn vertex(vertex: waylib_input_vertex, @builtin(instance_index) inst_id: u32, @builtin(vertex_index) vert_id: u32) -> vertex_output {
+fn vertex(vertex: waylib_vertex_shader_vertex, @builtin(instance_index) inst_id: u32, @builtin(vertex_index) vert_id: u32) -> vertex_output {
 	let transform = instances[inst_id].transform;
 	return vertex_output(camera.current_VP * transform * vec4f(vertex.position, 1), calculate_barycentric_coordinates(vert_id));
 }
@@ -73,12 +73,12 @@ int main() {
 			{
 				wl::model_draw(frame, model);
 			}
-			wl::end_camera_mode(frame);
+			wl::reset_camera_mode(frame);
 		}
 		wl::end_drawing(frame);
 	}
 
 	wl::release_shader_preprocessor(p);
-	wl::release_wgpu_state(state);
+	wl::release_waylib_state(state);
 	wl::release_window(window);
 }

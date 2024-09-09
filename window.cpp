@@ -112,25 +112,25 @@ wgpu::Surface window_get_surface(window* window, WGPUInstance instance) {
 // 	return glfwGetWGPUSurface(device.getAdapter().getInstance(), window);
 // }
 
-wgpu_state window_get_wgpu_state(window* window, wgpu_state partial) {
+waylib_state window_get_waylib_state(window* window, waylib_state partial) {
 	partial.surface = window_get_surface(window, partial.instance);
 	return partial;
 }
 
 bool window_configure_surface(
-	window* window, wgpu_state state,
+	window* window, waylib_state state,
 	surface_configuration config /*= {}*/
 ) {
 	return configure_surface(state, window_get_dimensions(window), config);
 }
 
 bool window_automatically_reconfigure_surface_on_resize(
-	window* window, wgpu_state state,
+	window* window, waylib_state state,
 	surface_configuration config /*= {}*/
 ) {
 	struct ResizeData {
 		char magic[5] = "ReDa";
-		wgpu_state state;
+		waylib_state state;
 		surface_configuration config;
 	};
 
@@ -149,31 +149,31 @@ bool window_automatically_reconfigure_surface_on_resize(
 	return res;
 }
 
-wgpu_state create_default_state_from_window(window* window, bool prefer_low_power /*= false*/) {
+waylib_state create_default_state_from_window(window* window, bool prefer_low_power /*= false*/) {
 	WGPUInstance instance = wgpuCreateInstance({});
 	wgpu::Surface surface = window_get_surface(window, instance);
 	return create_default_state_from_instance(instance, surface, prefer_low_power);
 }
 
 #ifndef WAYLIB_NO_CAMERAS
-void window_begin_camera_mode3D(wgpu_frame_state* frame, window* window, camera3D* camera, light* lights /*= nullptr*/, size_t light_count /*=0*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) {
+void window_begin_camera_mode3D(frame_state* frame, window* window, camera3D* camera, light* lights /*= nullptr*/, size_t light_count /*=0*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) {
 	begin_camera_mode3D(*frame, *camera, window_get_dimensions(window), {lights, light_count}, frame_time);
 }
-void window_begin_camera_mode3D(wgpu_frame_state& frame, window* window, camera3D& camera, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) {
+void window_begin_camera_mode3D(frame_state& frame, window* window, camera3D& camera, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) {
 	begin_camera_mode3D(frame, camera, window_get_dimensions(window), lights, frame_time);
 }
 
-void window_begin_camera_mode2D(wgpu_frame_state* frame, window* window, camera2D* camera, light* lights /*= nullptr*/, size_t light_count /*=0*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) {
+void window_begin_camera_mode2D(frame_state* frame, window* window, camera2D* camera, light* lights /*= nullptr*/, size_t light_count /*=0*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) {
 	begin_camera_mode2D(*frame, *camera, window_get_dimensions(window), {lights, light_count}, frame_time);
 }
-void window_begin_camera_mode2D(wgpu_frame_state& frame, window* window, camera2D& camera, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) {
+void window_begin_camera_mode2D(frame_state& frame, window* window, camera2D& camera, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) {
 	begin_camera_mode2D(frame, camera, window_get_dimensions(window), lights, frame_time);
 }
 
-void window_begin_camera_mode_identity(wgpu_frame_state* frame, window* window, light* lights /*= nullptr*/, size_t light_count /*=0*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) {
+void window_begin_camera_mode_identity(frame_state* frame, window* window, light* lights /*= nullptr*/, size_t light_count /*=0*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) {
 	begin_camera_mode_identity(*frame, window_get_dimensions(window), {lights, light_count}, frame_time);
 }
-void window_begin_camera_mode_identity(wgpu_frame_state& frame, window* window, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) {
+void window_begin_camera_mode_identity(frame_state& frame, window* window, std::span<light> lights /*={}*/, WAYLIB_OPTIONAL(frame_time) frame_time /*={}*/) {
 	begin_camera_mode_identity(frame, window_get_dimensions(window), lights, frame_time);
 }
 #endif // WAYLIB_NO_CAMERAS

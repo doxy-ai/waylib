@@ -100,6 +100,28 @@ WAYLIB_OPTIONAL(image) load_images_as_frames(const char** _paths, size_t paths_s
 	return load_images_as_frames(paths);
 }
 
+WAYLIB_OPTIONAL(image) merge_color_and_alpha_images(const image& color, const image& alpha) {
+	if(color.width != alpha.width && color.height != alpha.height
+		&& !(alpha.width == 1 && alpha.height == 1)) 
+	{
+		set_error_message_raw("Image dimensions don't match!");
+		return {};
+	}
+	assert(color.frames == 1 && alpha.frames == 1);
+	image out = color;
+	out.float_data = true;
+	out.data32 = new WAYLIB_NAMESPACE_NAME::color[out.width * out.height];
+	for(size_t x = 0; x < out.width; ++x)
+		for(size_t y = 0; y < out.height; ++y) {
+			out.data32[y * out.height + x] = color.data32[y * out.height + x];
+			out.data32[y * out.height + x].a = alpha.data32[y * out.height + x].r;
+		}
+	return out;
+}
+WAYLIB_OPTIONAL(image) merge_color_and_alpha_images(const image* color, const image* alpha) {
+	return merge_color_and_alpha_images(*color, *alpha);
+}
+
 #ifdef WAYLIB_NAMESPACE_NAME
 }
 #endif
