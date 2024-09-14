@@ -4,17 +4,28 @@
 
 // Macro which defines an optional struct
 #ifdef __cplusplus
+	namespace detail {
+		template<typename T>
+		struct is_future : std::false_type {};
+		template<typename T>
+		struct is_future<std::future<T>> : std::true_type {};
+		template<typename T>
+		static constexpr bool is_future_v = is_future<T>::value;
+	}
+
 	template<typename T>
 	struct optional {
 		bool has_value = false;
 		T value;
 
-		optional() requires(!std::is_reference_v<T>) : has_value(false) {}
+		optional() requires(!std::is_reference_v<T> && !detail::is_future_v<T>) : has_value(false) {}
 		optional() requires(std::is_reference_v<T>) : has_value(false), value([]() -> T {
 			static std::remove_reference_t<T> def = {};
 			return def;
 		}()) {}
+		optional() requires(detail::is_future_v<T>) : has_value(false), value() {}
 		optional(const T& value) : has_value(true), value(value) {}
+		optional(T&& value) requires(!std::is_reference_v<T>) : has_value(true), value(std::move(value)) {}
 		optional(bool has_value, const T& value) : has_value(has_value), value(value) {}
 		optional(const optional&) = default;
 		optional(optional&&) = default;
@@ -43,6 +54,7 @@ typedef uint32_t bool32;
 
 struct shader_preprocessor;
 struct camera_globals;
+struct thread_pool_future;
 
 typedef struct color {
 	float r, g, b, a;
@@ -553,7 +565,6 @@ typedef struct frame_time {
 	template struct optional<frame_time>;
 #endif
 
-
 WAYLIB_NULLABLE(const char*) get_error_message();
 void set_error_message_raw(WAYLIB_NULLABLE(const char*) message);
 void clear_error_message();
@@ -586,6 +597,28 @@ WAYLIB_OPTIONAL(image) merge_images(
 	bool free_incoming
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= true
+#endif
+);
+
+WAYLIB_NULLABLE(thread_pool_future*) thread_pool_enqueue(
+	void(*function)(), 
+	bool return_future
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= false
+#endif
+	, WAYLIB_OPTIONAL(size_t) initial_pool_size
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
+);
+
+void release_thread_pool_future(thread_pool_future* future);
+
+void thread_pool_future_wait(
+	thread_pool_future* future,
+	WAYLIB_OPTIONAL(float) seconds_until_timeout
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
 #endif
 );
 

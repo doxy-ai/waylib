@@ -304,6 +304,31 @@ WAYLIB_OPTIONAL(image) merge_images(image* images, size_t images_size, bool free
 	return merge_images({images, images_size}, free_incoming);
 }
 
+
+ThreadPool& get_thread_pool(WAYLIB_OPTIONAL(size_t) initial_pool_size /*= std::thread::hardware_concurrency() - 1*/) {
+	static ThreadPool pool(initial_pool_size.has_value ? initial_pool_size.value : std::thread::hardware_concurrency() - 1);
+	return pool;
+}
+
+WAYLIB_NULLABLE(thread_pool_future*) thread_pool_enqueue(void(*function)(), bool return_future /*= false*/, WAYLIB_OPTIONAL(size_t) initial_pool_size /*= std::thread::hardware_concurrency() - 1*/) WAYLIB_TRY {
+	auto future = thread_pool_enqueue<void(*)()>(std::move(function), initial_pool_size);
+	if(!return_future) return nullptr;
+	return new thread_pool_future(std::move(future));
+} WAYLIB_CATCH(nullptr)
+
+void release_thread_pool_future(thread_pool_future* future) {
+	delete future;
+}
+
+void thread_pool_future_wait(thread_pool_future* future, WAYLIB_OPTIONAL(float) seconds_until_timeout /*= never*/) {
+	if(!seconds_until_timeout.has_value) 
+		future->wait();
+	else {
+		auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::duration<double>(seconds_until_timeout.value));
+		future->wait_for(microseconds);
+	}
+}
+
 #ifdef WAYLIB_NAMESPACE_NAME
 }
 #endif

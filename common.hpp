@@ -8,6 +8,7 @@
 
 #include "math.hpp"
 #include "thirdparty/defer.hpp"
+#include "thirdparty/thread_pool.hpp"
 
 #include <cstdint>
 #include <cstddef>
@@ -88,6 +89,8 @@ namespace detail {
 	#define frame_defer(frame) auto DEFER_2(__LINE__) = detail::___frame_defer_dummy___{frame.finalizers} << [=]() mutable
 #endif
 
+struct thread_pool_future : std::future<void> {};
+
 
 
 std::string get_error_message_and_clear();
@@ -163,6 +166,24 @@ WAYLIB_OPTIONAL(image) merge_images(
 		= true
 #endif
 );
+
+// Note: Not recommended to be used!
+ThreadPool& get_thread_pool(
+	WAYLIB_OPTIONAL(size_t) initial_pool_size
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
+);
+
+template <typename F, typename... Args>
+auto thread_pool_enqueue(
+	F&& function, 
+	WAYLIB_OPTIONAL(size_t) initial_pool_size
+#ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
+		= {}
+#endif
+	, Args&&... args
+) { return get_thread_pool(initial_pool_size).AddTask(function, args...); }
 
 #ifdef WAYLIB_NAMESPACE_NAME
 }

@@ -818,7 +818,7 @@ WAYLIB_OPTIONAL(frame_state) begin_drawing(waylib_state state, WAYLIB_OPTIONAL(c
 	return begin_drawing_render_texture(state, texture.createView(viewDescriptor), {texture.getWidth(), texture.getHeight()}, clear_color);
 } WAYLIB_CATCH({})
 
-static std::thread submit_thread;
+static WAYLIB_OPTIONAL(std::future<void>) submit_future = {};
 void end_drawing(frame_state& frame) WAYLIB_TRY {
 	frame.render_pass.end();
 	frame.render_pass.release();
@@ -831,8 +831,7 @@ void end_drawing(frame_state& frame) WAYLIB_TRY {
 	frame.render_encoder.release(); frame.encoder.release();
 
 	// std::cout << "Submitting command..." << std::endl;
-	if(submit_thread.joinable()) submit_thread.join();
-	submit_thread = std::thread([commands, render_commands, &frame]{
+	submit_future = thread_pool_enqueue([commands, render_commands, &frame]{
 		frame.state.device.getQueue().submit(std::vector<WGPUCommandBuffer>{commands, render_commands});
 		((wgpu::CommandBuffer*)&commands)->release();
 		((wgpu::CommandBuffer*)&render_commands)->release();
@@ -841,14 +840,12 @@ void end_drawing(frame_state& frame) WAYLIB_TRY {
 void end_drawing(frame_state* frame) { end_drawing(*frame); }
 
 void present_frame(frame_state& frame) WAYLIB_TRY {
-	if(submit_thread.joinable()) submit_thread.join();
+	if(submit_future.has_value) submit_future.value.wait();
+	submit_future = {};
 
-	// Call all of the finalizers // TODO: Slower than calling after present?
 	auto finalizers = std::move(*frame.finalizers);
-	auto finalizer_thread = std::thread([finalizers = std::move(finalizers)] {
-		for(auto& finalizer: finalizers)
-			finalizer();
-	});
+	for(auto& finalizer: finalizers)
+		finalizer();
 
 #ifndef __EMSCRIPTEN__
 	frame.state.surface.present();
@@ -856,7 +853,6 @@ void present_frame(frame_state& frame) WAYLIB_TRY {
 
 	// Process callbacks
 	process_wgpu_events(frame.state.device);
-	finalizer_thread.join();
 } WAYLIB_CATCH()
 void present_frame(frame_state* frame) { present_frame(*frame); }
 
