@@ -20,7 +20,7 @@ struct pbr_data_t {
 	use_metalness_map: u32,
 	use_ambient_occlusion_map: u32,
 	use_emmission_map: u32,
-	use_enviornment_map: u32,
+	use_environment_map: u32,
 };
 @group(0) @binding(1) var<uniform> pbr_data: pbr_data_t;
 
@@ -51,10 +51,10 @@ struct pbr_data_t {
 		}
 		normal = normalize(normal);
 
-		var enviornment = vec3f(.1);
-		if pbr_data.use_enviornment_map > 0 {
+		var environment = vec3f(.1);
+		if pbr_data.use_environment_map > 0 {
 			let sample = waylib_sample_cubemap(normal);
-			enviornment = sample.rgb * sample.a; // TODO: Pre multiplied alpha? Replace?
+			environment = sample.rgb * sample.a; // TODO: Pre multiplied alpha? Replace?
 		}
 
 		var roughness = pbr_data.roughness;
@@ -82,7 +82,7 @@ struct pbr_data_t {
 			color,
 			emmission,
 			normal,
-			enviornment,
+			environment,
 			roughness,
 			metalness,
 			ao

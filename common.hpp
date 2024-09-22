@@ -77,9 +77,9 @@ union image_data_span {
 };
 
 // TODO: Is there an alternative to std::function we can use?
-struct wgpu_frame_finalizers: public std::vector<std::function<void()>> { using std::vector<std::function<void()>>::vector; };
+struct frame_finalizers: public std::vector<std::function<void()>> { using std::vector<std::function<void()>>::vector; };
 namespace detail {
-	struct ___frame_defer_dummy___ { wgpu_frame_finalizers* finalizers; };
+	struct ___frame_defer_dummy___ { frame_finalizers* finalizers; };
 	template <std::invocable F> auto operator<<(___frame_defer_dummy___ d, F f) { return d.finalizers->emplace_back(f); }
 }
 #ifdef WAYLIB_NAMESPACE_NAME

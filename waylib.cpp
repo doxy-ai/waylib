@@ -451,7 +451,7 @@ WAYLIB_OPTIONAL(geometry_transformation_shader) create_geometry_transformation_s
 	geometry_transformation_shader geometry_transformer {
 		.computer = {
 			.buffer_count = 7,
-			.buffers = new buffer[7],
+			.buffers = new gpu_buffer[7],
 			.texture_count = WAYLIB_TEXTURE_SLOT_COUNT,
 			.textures = new texture[WAYLIB_TEXTURE_SLOT_COUNT],
 			.heap_allocated = true
@@ -472,7 +472,7 @@ WAYLIB_OPTIONAL(geometry_transformation_shader) create_geometry_transformation_s
 	auto shader = create_shader(state, wgsl_source_code, config);
 	if(!shader.has_value) return {};
 	geometry_transformer.computer.shader = shader.value;
-	upload_computer(state, geometry_transformer.computer);
+	computer_upload(state, geometry_transformer.computer);
 
 	return geometry_transformer;
 } WAYLIB_CATCH({})
@@ -731,7 +731,7 @@ WAYLIB_OPTIONAL(frame_state) begin_drawing_render_texture(waylib_state state, WG
 
 	static wgpu::Texture depthTexture;
 	static wgpu::TextureView depthTextureView;
-	static wgpu_frame_finalizers finalizers;
+	static frame_finalizers finalizers;
 
 	// Create a command encoder for the draw call
 	wgpu::CommandEncoderDescriptor encoderDesc = {};
@@ -825,7 +825,7 @@ void end_drawing(frame_state& frame) WAYLIB_TRY {
 
 	// Finally encode and submit the render pass
 	wgpu::CommandBufferDescriptor cmdBufferDescriptor = {};
-	cmdBufferDescriptor.label = "Waylib Frame Command buffer";
+	cmdBufferDescriptor.label = "Waylib Frame Command Buffer";
 	wgpu::CommandBuffer render_commands = frame.render_encoder.finish(cmdBufferDescriptor);
 	wgpu::CommandBuffer commands = frame.encoder.finish(cmdBufferDescriptor);
 	frame.render_encoder.release(); frame.encoder.release();
@@ -1340,8 +1340,6 @@ void release_model(model& model, bool release_meshes /*= true*/, bool release_ma
 }
 void release_model(model* model) { release_model(*model); }
 
-#define WAYLIB_RELEASE_WAYLIB_BUFFER_AT_FRAME_END(frame, buffer) frame.finalizers->emplace_back([buffer]() mutable { buffer.data.destroy(); buffer.data.release(); })
-
 void model_draw_instanced(frame_state& frame, model& model, std::span<model_instance_data> instances) WAYLIB_TRY {
 	static WGPUBufferDescriptor instanceBufferDesc = {
 		.label = "Waylib Instance Buffer",
@@ -1424,26 +1422,26 @@ void model_draw_instanced(frame_state& frame, model& model, std::span<model_inst
 			};
 
 			size_t scaled_count = roundUpTo3(std::max(mesh.triangleCount, mesh.vertexCount) * mat.geometry_transformer->vertex_multiplier);
-			buffer vertexOutput {
+			gpu_buffer vertexOutput {
 				.size = scaled_count * WAYLIB_MESH_VERTEX_SIZE,
 				.offset = 0,
 			};
-			buffer indexOutput {
+			gpu_buffer indexOutput {
 				.size = (indexBuffer ? roundUpTo3(mesh.triangleCount * mat.geometry_transformer->vertex_multiplier) : 0) * sizeof(index_t),
 				.offset = 0
 			};
-			upload_buffer(frame.state, vertexOutput, wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Vertex | wgpu::BufferUsage::Storage);
-			buffer_copy_record_existing(frame.encoder, vertexOutput, buffer{.size=vertexBuffer.getSize(), .offset=0, .data=vertexBuffer});
-			WAYLIB_RELEASE_WAYLIB_BUFFER_AT_FRAME_END(frame, vertexOutput);
+			gpu_buffer_upload(frame.state, vertexOutput, wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Vertex | wgpu::BufferUsage::Storage);
+			gpu_buffer_copy_record_existing(frame.encoder, vertexOutput, gpu_buffer{.size=vertexBuffer.getSize(), .offset=0, .data=vertexBuffer});
+			frame_defer(frame) { release_gpu_buffer(vertexOutput); };
 			if(indexBuffer) {
-				upload_buffer(frame.state, indexOutput, wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Index | wgpu::BufferUsage::Storage);
-				buffer_copy_record_existing(frame.encoder, indexOutput, buffer{.size=indexBuffer.getSize(), .offset=0, .data=indexBuffer});
-				WAYLIB_RELEASE_WAYLIB_BUFFER_AT_FRAME_END(frame, indexOutput);
+				gpu_buffer_upload(frame.state, indexOutput, wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Index | wgpu::BufferUsage::Storage);
+				gpu_buffer_copy_record_existing(frame.encoder, indexOutput, gpu_buffer{.size=indexBuffer.getSize(), .offset=0, .data=indexBuffer});
+				frame_defer(frame) { release_gpu_buffer(indexOutput); };
 			}
 
-			buffer gpu_metadata_in = create_buffer(frame.state, metadata); WAYLIB_RELEASE_WAYLIB_BUFFER_AT_FRAME_END(frame, gpu_metadata_in); // TODO: Should be a uniform buffer?
+			gpu_buffer gpu_metadata_in = create_gpu_buffer(frame.state, metadata); frame_defer(frame) { release_gpu_buffer(gpu_metadata_in); }; // TODO: Should be a uniform gpu_buffer?
 			// TODO: Scale output metadata here?
-			buffer gpu_metadata_out = create_buffer(frame.state, metadata); WAYLIB_RELEASE_WAYLIB_BUFFER_AT_FRAME_END(frame, gpu_metadata_out);
+			gpu_buffer gpu_metadata_out = create_gpu_buffer(frame.state, metadata); frame_defer(frame) { release_gpu_buffer(gpu_metadata_out); };
 
 			auto& computer = mat.geometry_transformer->computer;
 			computer.buffers[0] = gpu_metadata_in;
@@ -1475,7 +1473,7 @@ void model_draw_instanced(frame_state& frame, model& model, std::span<model_inst
 			computer_record_existing(frame.state, frame.encoder, computer, workgroups);
 			if( !(!mat.geometry_transformer->force_vertex_count_sync && mat.geometry_transformer->vertex_multiplier == 1) ){ // If vertex count likely changed... we need to sync the new count
 				gpu_metadata_out.cpu_data = nullptr; // Prepare the buffer for downloading
-				buffer_download(frame.state, gpu_metadata_out);
+				gpu_buffer_download(frame.state, gpu_metadata_out);
 				metadata = *(mesh_metadata*)gpu_metadata_out.cpu_data;
 			}
 

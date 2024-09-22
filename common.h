@@ -135,7 +135,7 @@ typedef struct texture {
 	template struct optional<texture>;
 #endif
 
-struct buffer {
+struct gpu_buffer {
 	size_t size;
 	size_t offset;
 	uint8_t* cpu_data;
@@ -144,7 +144,7 @@ struct buffer {
 	bool heap_allocated;
 };
 #ifdef __cplusplus
-	template struct optional<buffer>;
+	template struct optional<gpu_buffer>;
 #endif
 
 
@@ -170,7 +170,7 @@ typedef struct shader {
 
 struct computer {
 	index_t buffer_count;
-	buffer* buffers;
+	gpu_buffer* buffers;
 	index_t texture_count;
 	texture* textures;
 
@@ -179,7 +179,7 @@ struct computer {
 	bool heap_allocated;
 
 #ifdef WAYLIB_ENABLE_CLASSES
-	inline std::span<buffer> get_buffers() { return {buffers, buffer_count}; }
+	inline std::span<gpu_buffer> get_buffers() { return {buffers, buffer_count}; }
 	inline std::span<texture> get_textures() { return {textures, texture_count}; }
 #endif
 };
@@ -193,7 +193,7 @@ struct geometry_transformation_shader {
 	// bool process_instances;
 	bool per_vertex_processing; // When false a shader instance is dispatched per triangle, when true its dispatched per vertex
 	bool force_vertex_count_sync; // Forces the system to assume that the vertex count changed and sync it with cpu
-	float vertex_multiplier // The geometry output by the shader will have this many times more verticies than the input (rounded up to closest multiple of 3)
+	float vertex_multiplier // The geometry output by the shader will have this many times more vertices than the input (rounded up to closest multiple of 3)
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= 1
 #endif
@@ -235,7 +235,7 @@ typedef struct pbr_material {
 #endif
 
 	vec4f_ color;
-	vec4f_ emmision;
+	vec4f_ emission;
 	float roughness;
 	float metalness;
 
@@ -256,8 +256,8 @@ typedef struct pbr_material {
 	bool32 use_roughness_map;
 	bool32 use_metalness_map;
 	bool32 use_ambient_occlusion_map;
-	bool32 use_emmision_map;
-	bool32 use_enviornment_map; // Located in cubemap slot
+	bool32 use_emission_map;
+	bool32 use_environment_map; // Located in cubemap slot
 
 	char padding[20]; // Make it take up 96 bytes
 } pbr_material;
@@ -528,7 +528,7 @@ typedef struct waylib_state {
 	template struct optional<waylib_state>;
 #endif
 
-struct wgpu_frame_finalizers;
+struct frame_finalizers;
 
 typedef struct frame_state {
 	waylib_state state;
@@ -538,7 +538,7 @@ typedef struct frame_state {
 	WAYLIB_C_OR_CPP_TYPE(WGPUCommandEncoder, wgpu::CommandEncoder) render_encoder;
 	WAYLIB_C_OR_CPP_TYPE(WGPUCommandEncoder, wgpu::CommandEncoder) encoder;
 	WAYLIB_C_OR_CPP_TYPE(WGPURenderPassEncoder, wgpu::RenderPassEncoder) render_pass;
-	wgpu_frame_finalizers* finalizers;
+	frame_finalizers* finalizers;
 } frame_state;
 #ifdef __cplusplus
 	template struct optional<frame_state>;

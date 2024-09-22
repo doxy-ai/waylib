@@ -141,7 +141,7 @@ typedef struct model_process_configuration {
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= true
 #endif
-	; bool join_identical_vertecies
+	; bool join_identical_vertices
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= true
 #endif
@@ -633,10 +633,10 @@ void release_texture(
 	texture* texture
 );
 
-void upload_buffer(
-	waylib_state state,
-	buffer* buffer,
-	WGPUBufferUsageFlags usage
+void gpu_buffer_upload(
+	waylib_state state, 
+	gpu_buffer* gpu_buffer, 
+	WGPUBufferUsageFlags usage 
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= WGPUBufferUsage_CopyDst | WGPUBufferUsage_Storage
 #endif
@@ -646,8 +646,8 @@ void upload_buffer(
 #endif
 );
 
-buffer create_buffer(
-	waylib_state state,
+gpu_buffer create_gpu_buffer(
+	waylib_state state, 
 	void* data,
 	size_t size,
 	WGPUBufferUsageFlags usage
@@ -659,51 +659,51 @@ buffer create_buffer(
 		 = nullptr
 #endif
 );
-void* buffer_map(
-	waylib_state state,
-	buffer* buffer,
-	WGPUMapModeFlags mode
+void* gpu_buffer_map(
+	waylib_state state, 
+	gpu_buffer* gpu_buffer, 
+	WGPUMapModeFlags mode 
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= WGPUMapMode_None
 #endif
 );
-const void* buffer_map_const(
-	waylib_state state,
-	buffer* buffer,
-	WGPUMapModeFlags mode
+const void* gpu_buffer_map_const(
+	waylib_state state, 
+	gpu_buffer* gpu_buffer, 
+	WGPUMapModeFlags mode 
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= WGPUMapMode_None
 #endif
 );
 
-void buffer_unmap(buffer* buffer);
+void gpu_buffer_unmap(gpu_buffer* gpu_buffer);
 
-void buffer_release(buffer* buffer);
+void release_gpu_buffer(gpu_buffer* gpu_buffer);
 
-void buffer_copy_record_existing(
-	WGPUCommandEncoder encoder,
-	buffer* dest,
-	const buffer* source
+void gpu_buffer_copy_record_existing(
+	WGPUCommandEncoder encoder, 
+	gpu_buffer* dest, 
+	const gpu_buffer* source
 );
 
-void buffer_copy(
-	waylib_state state,
-	buffer* dest,
-	const buffer* source
+void gpu_buffer_copy(
+	waylib_state state, 
+	gpu_buffer* dest, 
+	const gpu_buffer* source
 );
 
-void buffer_download(
-	waylib_state state,
-	buffer* buffer,
-	bool create_intermediate_buffer
+void gpu_buffer_download(
+	waylib_state state, 
+	gpu_buffer* gpu_buffer, 
+	bool create_intermediate_gpu_buffer 
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= true
 #endif
 );
 
-void upload_computer(
-	waylib_state state,
-	computer* compute,
+void computer_upload(
+	waylib_state state, 
+	computer* compute, 
 	const char* label
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= nullptr
@@ -744,8 +744,8 @@ void release_computer(
 );
 
 void quick_dispatch(
-	waylib_state state,
-	buffer* buffers,
+	waylib_state state, 
+	gpu_buffer* buffers,
 	size_t buffer_size,
 	texture* textures,
 	size_t texture_size,

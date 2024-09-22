@@ -304,10 +304,10 @@ void release_texture(
 	texture& texture
 );
 
-void upload_buffer(
-	waylib_state state,
-	buffer& buffer,
-	WGPUBufferUsageFlags usage
+void gpu_buffer_upload(
+	waylib_state state, 
+	gpu_buffer& gpu_buffer, 
+	WGPUBufferUsageFlags usage 
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Storage
 #endif
@@ -317,9 +317,9 @@ void upload_buffer(
 #endif
 );
 
-buffer create_buffer(
-	waylib_state state,
-	std::span<std::byte> data,
+gpu_buffer create_gpu_buffer(
+	waylib_state state, 
+	std::span<std::byte> data, 
 	WGPUBufferUsageFlags usage
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		 = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Storage
@@ -331,21 +331,21 @@ buffer create_buffer(
 );
 
 template<typename T>
-inline buffer create_buffer(
-	waylib_state state,
-	T& data,
-	WGPUBufferUsageFlags usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Storage,
+inline gpu_buffer create_gpu_buffer(
+	waylib_state state, 
+	T& data, 
+	WGPUBufferUsageFlags usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Storage, 
 	WAYLIB_OPTIONAL(std::string_view) label = {}
 ){
-	return create_buffer(state, std::span<std::byte>{(std::byte*)&data, sizeof(T)}, usage, label);
+	return create_gpu_buffer(state, std::span<std::byte>{(std::byte*)&data, sizeof(T)}, usage, label);
 }
 
 template<typename T>
 requires(!std::is_same_v<T, std::byte>)
-inline buffer create_buffer(
-	waylib_state state,
-	std::span<T> data,
-	WGPUBufferUsageFlags usage
+inline gpu_buffer create_gpu_buffer(
+	waylib_state state, 
+	std::span<T> data, 
+	WGPUBufferUsageFlags usage 
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Storage,
 #endif
@@ -354,106 +354,106 @@ inline buffer create_buffer(
 		= {}
 #endif
 ){
-	return create_buffer(state, std::span<std::byte>{(std::byte*)data.data(), data.size() * sizeof(T)}, usage, label);
+	return create_gpu_buffer(state, std::span<std::byte>{(std::byte*)data.data(), data.size() * sizeof(T)}, usage, label);
 }
 
-void* buffer_map(
-	waylib_state state,
-	buffer& buffer,
-	WGPUMapModeFlags mode
+void* gpu_buffer_map(
+	waylib_state state, 
+	gpu_buffer& gpu_buffer, 
+	WGPUMapModeFlags mode 
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= wgpu::MapMode::None
 #endif
 );
-const void* buffer_map_const(
-	waylib_state state,
-	buffer& buffer,
-	WGPUMapModeFlags mode
+const void* gpu_buffer_map_const(
+	waylib_state state, 
+	gpu_buffer& gpu_buffer, 
+	WGPUMapModeFlags mode 
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= wgpu::MapMode::None
 #endif
 );
 
 template<typename T>
-inline T& buffer_map(
-	waylib_state state,
-	buffer& buffer,
-	WGPUMapModeFlags mode
+inline T& gpu_buffer_map(
+	waylib_state state, 
+	gpu_buffer& gpu_buffer,
+	WGPUMapModeFlags mode 
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= wgpu::MapMode::None
 #endif
 ) {
-	assert(buffer.size == sizeof(T));
-	return *(T*)buffer_map(state, buffer, mode);
+	assert(gpu_buffer.size == sizeof(T));
+	return *(T*)gpu_buffer_map(state, gpu_buffer, mode);
 }
 
 template<typename T>
-inline const T& buffer_map_const(
-	waylib_state state,
-	buffer& buffer,
-	WGPUMapModeFlags mode
+inline const T& gpu_buffer_map_const(
+	waylib_state state, 
+	gpu_buffer& gpu_buffer,
+	WGPUMapModeFlags mode 
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= wgpu::MapMode::None
 #endif
 ) {
-	assert(buffer.size == sizeof(T));
-	return *(T*)buffer_map_const(state, buffer, mode);
+	assert(gpu_buffer.size == sizeof(T));
+	return *(T*)gpu_buffer_map_const(state, gpu_buffer, mode);
 }
 
 template<typename T>
-inline std::span<T> buffer_map(
-	waylib_state state,
-	buffer& buffer,
-	WGPUMapModeFlags mode
+inline std::span<T> gpu_buffer_map(
+	waylib_state state, 
+	gpu_buffer& gpu_buffer, 
+	WGPUMapModeFlags mode 
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= wgpu::MapMode::None
 #endif
 ) {
-	assert((buffer.size % sizeof(T)) == 0);
-	return {(T*)buffer_map(state, buffer, mode), buffer.size / sizeof(T)};
+	assert((gpu_buffer.size % sizeof(T)) == 0);
+	return {(T*)gpu_buffer_map(state, gpu_buffer, mode), gpu_buffer.size / sizeof(T)};
 }
 
 template<typename T>
-inline std::span<const T> buffer_map_const(
-	waylib_state state,
-	buffer& buffer,
-	WGPUMapModeFlags mode
+inline std::span<const T> gpu_buffer_map_const(
+	waylib_state state, 
+	gpu_buffer& gpu_buffer,
+	WGPUMapModeFlags mode 
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= wgpu::MapMode::None
 #endif
 ) {
-	assert((buffer.size % sizeof(T)) == 0);
-	return {(const T*)buffer_map_const(state, buffer, mode), buffer.size / sizeof(T)};
+	assert((gpu_buffer.size % sizeof(T)) == 0);
+	return {(const T*)gpu_buffer_map_const(state, gpu_buffer, mode), gpu_buffer.size / sizeof(T)};
 }
 
-void buffer_unmap(buffer& buffer);
+void gpu_buffer_unmap(gpu_buffer& gpu_buffer);
 
-void buffer_release(buffer& buffer);
+void release_gpu_buffer(gpu_buffer& gpu_buffer);
 
-void buffer_copy_record_existing(
-	WGPUCommandEncoder encoder,
-	buffer& dest,
-	const buffer& source
+void gpu_buffer_copy_record_existing(
+	WGPUCommandEncoder encoder, 
+	gpu_buffer& dest, 
+	const gpu_buffer& source
 );
 
-void buffer_copy(
-	waylib_state state,
-	buffer& dest,
-	const buffer& source
+void gpu_buffer_copy(
+	waylib_state state, 
+	gpu_buffer& dest, 
+	const gpu_buffer& source
 );
 
-void buffer_download(
-	waylib_state state,
-	buffer& buffer,
-	bool create_intermediate_buffer
+void gpu_buffer_download(
+	waylib_state state, 
+	gpu_buffer& gpu_buffer, 
+	bool create_intermediate_gpu_buffer 
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= true
 #endif
 );
 
-void upload_computer(
-	waylib_state state,
-	computer& compute,
+void computer_upload(
+	waylib_state state, 
+	computer& compute, 
 	WAYLIB_OPTIONAL(std::string_view) label
 #ifdef WAYLIB_ENABLE_DEFAULT_PARAMETERS
 		= {}
@@ -494,10 +494,10 @@ void release_computer(
 );
 
 void quick_dispatch(
-	waylib_state state,
-	std::span<buffer> buffers,
-	std::span<texture> textures,
-	shader compute_shader,
+	waylib_state state, 
+	std::span<gpu_buffer> buffers, 
+	std::span<texture> textures, 
+	shader compute_shader, 
 	vec3u workgroups
 );
 
