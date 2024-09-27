@@ -1,0 +1,4 @@
+[submodule "modules/waylib/core/thirdparty/WebGPU-distribution"]
+	path = modules/waylib/core/thirdparty/WebGPU-distribution
+	url = https://github.com/doxy-ai/WebGPU-distribution.git
+	branch = dawn
