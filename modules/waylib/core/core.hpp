@@ -4,6 +4,7 @@
 #include <webgpu/webgpu.hpp>
 
 #include "utility.hpp"
+#include "wgsl_types.hpp"
 
 WAYLIB_BEGIN_NAMESPACE
 

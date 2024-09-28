@@ -1,7 +1,10 @@
+set(GLM_ENABLE_CXX_20 ON CACHE BOOL "Enable C++ 20")
+set(GLM_ENABLE_LANG_EXTENSIONS ON CACHE BOOL "Enable language extensions")
+add_subdirectory(thirdparty/glm)
 add_subdirectory(thirdparty/WebGPU-distribution)
 
 add_library(waylib_core core.cpp)
-target_link_libraries(waylib_core PUBLIC webgpu)
+target_link_libraries(waylib_core PUBLIC webgpu glm::glm)
 
 set(MODULE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../../)
 cmake_path(ABSOLUTE_PATH MODULE_DIRECTORY NORMALIZE)

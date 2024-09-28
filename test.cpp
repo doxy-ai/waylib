@@ -3,7 +3,9 @@
 #include "waylib/waylib.hpp"
 
 int main() {
-	wl::thread_pool::enqueue([] {
-		std::cout << "Hello 世界" << std::endl;
-	}).wait();
+	auto window = wl::window::create({800, 600});
+	while (!window.should_close())
+		wl::thread_pool::enqueue([]{
+			std::cout << "Hello 世界" << std::endl;
+		});
 }
