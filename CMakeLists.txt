@@ -4,6 +4,7 @@ project(waylib CXX C)
 set(CMAKE_CXX_STANDARD 20)
 
 add_subdirectory(modules/waylib/core)
+add_subdirectory(modules/waylib/window)
 
 add_executable(waylib_tests test.cpp)
-target_link_libraries(waylib_tests PUBLIC waylib::core)
+target_link_libraries(waylib_tests PUBLIC waylib::core waylib::window)
