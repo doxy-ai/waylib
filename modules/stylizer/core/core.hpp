@@ -3,10 +3,8 @@
 #include "config.hpp"
 #include <webgpu/webgpu.hpp>
 
-#include "utility.hpp"
-#include "optional.h"
-#include "webgpu/webgpu.h"
-#include "wgsl_types.hpp"
+#include "utility/utility.hpp"
+#include "utility/wgsl_types.hpp"
 #include "shader_preprocessor.hpp"
 
 #include <span>
@@ -30,6 +28,8 @@ STYLIZER_BEGIN_NAMESPACE
 
 
 	static constexpr size_t minimum_utility_buffer_size = 304;
+
+	static constexpr WGPUTextureFormat depthTextureFormat = wgpu::TextureFormat::Depth24Plus;
 
 
 	inline constexpr WGPUStringView toWGPU(std::string_view view) { return WGPUStringView{view.data(), view.size()}; }
@@ -153,6 +153,34 @@ STYLIZER_BEGIN_NAMESPACE
 		}
 		operator bool() const { return format != image_format::Invalid && *data; }
 
+		static image texture_not_found(size_t dimensions = 16) {
+			image img;
+			img.format = image_format::RGBA8;
+			img.data = {true, new color8C[dimensions * dimensions]};
+			for (size_t i = 0; i < dimensions; ++i) {
+				for (size_t j = 0; j < dimensions; ++j) {
+					color8C *p = &img.rgba8[j * dimensions + i];
+					p->r = (float(i) / dimensions) * 255;
+					p->g = (float(j) / dimensions) * 255;
+					p->b = .5 * 255;
+					p->a = 1 * 255;
+				}
+			}
+
+			img.size.x = img.size.y = dimensions;
+			img.frames = 1;
+			return img;
+		}
+
+		static image texture_not_found_frames(size_t frames, size_t dimensions = 16) {
+			auto img = texture_not_found(dimensions);
+			std::vector<image> images(frames, img);
+
+			auto out = merge(images);
+			img.release();
+			return out;
+		}
+
 		inline void release() {
 			if(data) delete [] *gray;
 		}
@@ -222,6 +250,13 @@ STYLIZER_BEGIN_NAMESPACE
 // # Texture
 //////////////////////////////////////////////////////////////////////
 
+
+	// Helper function which make it easier to write begin drawing functions
+	std::pair<wgpu::CommandEncoder, wgpu::CommandEncoder> begin_drawing_create_command_encoders(wgpu_state& state);
+	struct texture begin_drawing_create_depth_texture(wgpu_state& state, vec2u size, WGPUTextureFormat depth_texture_format);
+	wgpu::RenderPassColorAttachment begin_drawing_create_color_attachment(wgpu::TextureView view, STYLIZER_OPTIONAL(colorC) clear_color);
+	wgpu::RenderPassDepthStencilAttachment begin_drawing_create_depth_attachment(wgpu::TextureView view, STYLIZER_OPTIONAL(colorC) clear_color);
+	wgpu::RenderPassEncoder begin_drawing_create_render_pass(wgpu::CommandEncoder encoder, std::span<wgpu::RenderPassColorAttachment> color_attachments, STYLIZER_OPTIONAL(wgpu::RenderPassDepthStencilAttachment) depth_attachment);
 
 	struct texture: public textureC {
 		STYLIZER_GENERIC_AUTO_RELEASE_SUPPORT(texture)
@@ -314,6 +349,11 @@ STYLIZER_BEGIN_NAMESPACE
 			return create(state, {size.x, size.y, 1}, config);
 		}
 
+		static const texture& default_texture(wgpu_state& state) {
+			static auto_release<texture> def = image::texture_not_found().upload(state);
+			return def;
+		}
+
 		void release() {
 			if(cpu_data) static_cast<image&>(**std::exchange(cpu_data, nullptr)).release();
 			if(gpu_data) std::exchange(gpu_data, nullptr).release();
@@ -342,6 +382,28 @@ STYLIZER_BEGIN_NAMESPACE
 			};
 		}
 		WGPUColorTargetState default_color_target_state() { return default_color_target_state(gpu_data.getFormat()); }
+
+		static WGPUColorTargetState no_blend_color_target_state(wgpu::TextureFormat format) {
+			static WGPUBlendState blendState = {
+				.color = {
+					.operation = wgpu::BlendOperation::Add,
+					.srcFactor = wgpu::BlendFactor::One,
+					.dstFactor = wgpu::BlendFactor::Zero,
+				},
+				.alpha = {
+					.operation = wgpu::BlendOperation::Add,
+					.srcFactor = wgpu::BlendFactor::One,
+					.dstFactor = wgpu::BlendFactor::Zero,
+				},
+			};
+			return WGPUColorTargetState{
+				.nextInChain = nullptr,
+				.format = format,
+				.blend = &blendState,
+				.writeMask = wgpu::ColorWriteMask::All,
+			};
+		}
+		WGPUColorTargetState no_blend_color_target_state() { return no_blend_color_target_state(gpu_data.getFormat()); }
 
 		texture& copy_to_buffer_record_existing(WGPUCommandEncoder encoder, gpu_buffer& buffer, size_t mip_level = 0);
 		texture& copy_to_buffer(wgpu_state& state, gpu_buffer& buffer, size_t mip_level = 0) {
@@ -428,6 +490,11 @@ STYLIZER_BEGIN_NAMESPACE
 			if(release_images) for(auto& image: images)
 				const_cast<struct image&>(image).release();
 			return image.upload_frames_as_cube(state, config, true);
+		}
+
+		static const cube_texture& default_cube_texture(wgpu_state& state) {
+			static auto_release<cube_texture> def = image::texture_not_found_frames(6).upload_frames_as_cube(state);
+			return def;
 		}
 
 		wgpu::TextureView create_mip_view(uint32_t base_mip = 0, uint32_t mip_count = 1, uint32_t base_layer = 0, uint32_t layer_count = 1, wgpu::TextureAspect aspect = wgpu::TextureAspect::All) {
@@ -719,7 +786,7 @@ STYLIZER_BEGIN_NAMESPACE
 		std::array<WGPUColorTargetState, 2> targets() {
 			return std::array<WGPUColorTargetState, 2>{
 				color().default_color_target_state(),
-				normal().default_color_target_state(),
+				normal().no_blend_color_target_state(),
 			};
 		}
 
@@ -741,11 +808,6 @@ STYLIZER_BEGIN_NAMESPACE
 		}
 
 		struct drawing_state begin_drawing(wgpu_state& state, STYLIZER_OPTIONAL(colorC) clear_color = {}, STYLIZER_OPTIONAL(gpu_buffer&) utility_buffer = {});
-	};
-
-	template<typename Tgbuffer>
-	concept geometry_bufferTargetProvider = requires(Tgbuffer gbuffer) {
-		{gbuffer.targets()} -> std::convertible_to<std::span<const WGPUColorTargetState>>; // TODO: Why is std::array not convertible to std::span?
 	};
 
 
@@ -779,6 +841,16 @@ STYLIZER_BEGIN_NAMESPACE
 		// Runs the provided function when the state is released
 		template<typename F>
 		void defer(F&& on_release) { finalizers->emplace_back(std::move(on_release)); }
+
+		wgpu::BindGroupEntry utility_buffer_bind_group_entry() {
+			auto zeroBuffer = gpu_buffer::zero_buffer(state(), minimum_utility_buffer_size, this);
+			return WGPUBindGroupEntry{
+				.binding = 0,
+				.buffer = utility_buffer ? utility_buffer->gpu_data : zeroBuffer.gpu_data,
+				.offset = utility_buffer ? utility_buffer->offset : zeroBuffer.offset,
+				.size = utility_buffer ? utility_buffer->size : zeroBuffer.size,
+			};
+		}
 
 		std::array<wgpu::CommandBuffer, 2> record_draw_commands() {
 			assert(render_pass); assert(pre_encoder); assert(render_encoder);
@@ -839,6 +911,11 @@ STYLIZER_BEGIN_NAMESPACE
 		}
 
 		shader_preprocessor& initialize_virtual_filesystem(const config &config = {});
+
+		inline shader_preprocessor& initialize(const wgpu_state& state, const config &config = {}) {
+			initialize_platform_defines(state);
+			return initialize_virtual_filesystem(config);
+		}
 
 		// Wrappers to ensure that the proper type is returned... for chaining purposes
 		inline shader_preprocessor& add_define(std::string_view name, std::string_view value) {
@@ -1089,7 +1166,7 @@ STYLIZER_BEGIN_NAMESPACE
 			assert(buffer_count + texture_count);
 			if(bind_group) bind_group.release();
 			bind_group = state.device.createBindGroup(WGPUBindGroupDescriptor {
-				.label = toWGPU("Stylizer Shader Data Bind Group"),
+				.label = toWGPU("Stylizer Material Data Bind Group"),
 				.layout = pipeline.getBindGroupLayout(2),
 				.entryCount = entries.size(),
 				.entries = entries.data()
@@ -1098,7 +1175,7 @@ STYLIZER_BEGIN_NAMESPACE
 		}
 
 		// TODO: This function needs to become gbuffer aware
-		material& upload(
+		material& upload_impl(
 			wgpu_state& state,
 			std::span<const WGPUColorTargetState> gbuffer_targets,
 			STYLIZER_OPTIONAL(std::span<WGPUVertexBufferLayout>) mesh_layout = {},
@@ -1162,12 +1239,22 @@ STYLIZER_BEGIN_NAMESPACE
 
 			if(pipeline) pipeline.release();
 			pipeline = state.device.createRenderPipeline(pipelineDesc);
+			
+			return *this;
+		}
 
+		material& upload(
+			wgpu_state& state,
+			std::span<const WGPUColorTargetState> gbuffer_targets,
+			STYLIZER_OPTIONAL(std::span<WGPUVertexBufferLayout>) mesh_layout = {},
+			material_configuration config = {}
+		) {
+			upload_impl(state, gbuffer_targets, mesh_layout, config);
 			if(texture_count + buffer_count > 0)
 				rebind_bind_group(state);
 			return *this;
 		}
-		template<geometry_bufferTargetProvider Tgbuffer>
+		template<GbufferProvider Tgbuffer>
 		material& upload(
 			wgpu_state& state,
 			Tgbuffer& gbuffer,
@@ -1214,14 +1301,17 @@ STYLIZER_BEGIN_NAMESPACE
 			return *this;
 		}
 
-		static mesh fullscreen_mesh(wgpu_state& state, bool upload = true) {
-			mesh out{}; out.zero();
-			out.vertex_count = 3;
-			out.triangle_count = 1;
-			out.positions = {true, new vec4f[]{vec4f(-1, -3, .99, 1), vec4f(3, 1, .99, 1), vec4f(-1, 1, .99, 1)}};
-			out.uvs = {true, new vec4f[]{vec4f(0, 2, 0, 0), vec4f(2, 0, 0, 0), vec4f(0)}};
-			if(upload) out.upload(state);
-			return out;
+		static mesh& fullscreen_mesh(wgpu_state& state, bool upload = true) {
+			static std::optional<mesh> out{}; 
+			if(!out) {
+				out = mesh{}; out->zero();
+				out->vertex_count = 3;
+				out->triangle_count = 1;
+				out->positions = {true, new vec4f[]{vec4f(-1, -3, .99, 1), vec4f(3, 1, .99, 1), vec4f(-1, 1, .99, 1)}};
+				out->uvs = {true, new vec4f[]{vec4f(0, 2, 0, 0), vec4f(2, 0, 0, 0), vec4f(0)}};
+				out->upload(state);
+			}
+			return *out;
 		}
 
 		static const std::array<WGPUVertexBufferLayout, 8>& mesh_layout() {
@@ -1360,6 +1450,8 @@ STYLIZER_BEGIN_NAMESPACE
 		}
 
 		mesh& upload(wgpu_state& state) {
+			assert(*positions);
+
 			auto metadata = this->metadata();
 			auto gpuMetadata = this->gpu_metadata();
 			size_t attribute_size = metadata.vertex_count * sizeof(vec4f);
@@ -1428,6 +1520,16 @@ STYLIZER_BEGIN_NAMESPACE
 			return materials()[i];
 		}
 
+		static model fullscreen_mesh(wgpu_state& state, material& material) {
+			return modelC{
+				.mesh_count = 1,
+				.meshes = &sl::mesh::fullscreen_mesh(state),
+				.material_count = 1,
+				.materials = &material,
+				.mesh_materials = nullptr,
+			};
+		};
+
 		model& upload(
 			wgpu_state& state,
 			std::span<const WGPUColorTargetState> gbuffer_targets,
@@ -1440,7 +1542,7 @@ STYLIZER_BEGIN_NAMESPACE
 				material.upload(state, gbuffer_targets, mesh_layout, material_config);
 			return *this;
 		}
-		template<geometry_bufferTargetProvider Tgbuffer>
+		template<GbufferProvider Tgbuffer>
 		model& upload(
 			wgpu_state& state,
 			Tgbuffer& gbuffer,

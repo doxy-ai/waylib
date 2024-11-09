@@ -1,6 +1,7 @@
 #include <iostream>
 
 #include "stylizer/stylizer.hpp"
+#include "stylizer/pbr/pbr.hpp"
 
 int main() {
 	sl::auto_release window = sl::window::create({800, 600});
@@ -8,30 +9,31 @@ int main() {
 	window.reconfigure_surface_on_resize(state);
 
 	// GBuffer that gets its color format from the window
-	sl::auto_release gbuffer = sl::geometry_buffer::create_default(state, window.get_size(), {
+	sl::auto_release gbuffer = sl::pbr::geometry_buffer::create_default(state, window.get_size(), {{
 		.color_format = wgpu::TextureFormat::Undefined
-	});
+	}});
 	window.auto_resize_gbuffer(state, gbuffer);
 
-	auto p = sl::shader_preprocessor{}.initialize_platform_defines(state).initialize_virtual_filesystem();
+	auto p = sl::pbr::initialize_shader_preprocessor(sl::shader_preprocessor{}.initialize(state));
 	sl::auto_release shader = sl::shader::from_wgsl(state, R"_(
 #define STYLIZER_CAMERA_DATA_IS_3D
-#include <stylizer/default_gbuffer>
-
-@group(2) @binding(0) var texture: texture_2d<f32>;
-@group(2) @binding(1) var textureSampler: sampler;
+#include <stylizer/pbr/gbuffer>
+#include <stylizer/pbr/material>
 
 @vertex
 fn vertex(in: vertex_input, @builtin(vertex_index) vertex_index: u32, @builtin(instance_index) instance_index: u32) -> vertex_output {
 	if false { ensure_gbuffer_layout(); }
-	return unpack_vertex_input_full(in, instances[instance_index].transform, camera_view_projection_matrix(utility.camera));
+	return unpack_vertex_input_full(in, vertex_index, instance_index, instances[instance_index].transform, camera_view_projection_matrix(utility.camera));
 }
 
 @fragment
 fn fragment(vert: vertex_output) -> fragment_output {
+	// if false { ensure_material_layout(); }
+	let mat = build_default_pbr_material(material_settings, vert);
 	return fragment_output(
-		textureSample(texture, textureSampler, vert.uv),
-		vec4f(vert.normal, 1.0),
+		mat.albedo,
+		vec4f(mat.normal, f32(material_settings.material_id)),
+		packed_from_pbr_material(mat, 0),
 	);
 }
 	)_", {.vertex_entry_point = "vertex", .fragment_entry_point = "fragment", .preprocessor = &p});
@@ -43,13 +45,12 @@ fn fragment(vert: vertex_output) -> fragment_output {
 	sl::auto_release model = sl::obj::load("../resources/suzane_highpoly.obj");
 	model.meshes()[0].indices = nullptr;
 	model.upload(state, gbuffer);
-	sl::auto_release material = sl::material(sl::materialC{
-		.texture_count = 1,
-		.textures = &texture,
+	sl::auto_release material = sl::pbr::material({sl::materialC{
+		.shader_count = 1,
 		.shaders = &shader,
-		.shader_count = 1
-	});
-	material.upload(state, gbuffer, {}, {.double_sided = true});
+	}});
+	material.albedo_texture = &texture;
+	material.upload(state, gbuffer);
 	model.c().material_count = 1;
 	model.c().materials = &material;
 	model.c().mesh_materials = nullptr;
@@ -64,16 +65,16 @@ fn fragment(vert: vertex_output) -> fragment_output {
 	}).upload_frames_as_cube(state, {.sampler_type = sl::texture_create_sampler_type::Trilinear});
 	sl::auto_release skyShader = sl::shader::from_wgsl(state, R"_(
 #define STYLIZER_CAMERA_DATA_IS_3D
-#include <stylizer/default_gbuffer>
+#include <stylizer/pbr/gbuffer>
 #include <stylizer/inverse>
 
-@group(2) @binding(0) var texture: texture_cube<f32>;
-@group(2) @binding(1) var texture_sampler: sampler;
+@group(2) @binding(0) var sky_texture: texture_cube<f32>;
+@group(2) @binding(1) var sky_sampler: sampler;
 
 @vertex
 fn vertex(in: vertex_input, @builtin(vertex_index) vertex_index: u32, @builtin(instance_index) instance_index: u32) -> vertex_output {
 	if false { ensure_gbuffer_layout(); }
-	return unpack_vertex_input(in);
+	return unpack_vertex_input(in, vertex_index, instance_index);
 }
 
 @fragment
@@ -86,23 +87,20 @@ fn fragment(vert: vertex_output) -> fragment_output {
 	let direction = normalize(worldSpacePos.xyz - utility.camera.position);
 
 	return fragment_output(
-		textureSample(texture, texture_sampler, direction),
-		vec4f(0.0),
+		textureSample(sky_texture, sky_sampler, direction),
+		vec4f(0),
+		vec4f(0),
 	);
 }
 	)_", {.vertex_entry_point = "vertex", .fragment_entry_point = "fragment", .preprocessor = &p});
-	sl::auto_release<sl::material> skyMat{}; skyMat.zero();
-	skyMat.c().texture_count = 1;
-	skyMat.c().textures = &skyTexture;
-	skyMat.c().shader_count = 1;
-	skyMat.c().shaders = &skyShader;
+	sl::auto_release<sl::material> skyMat = {sl::materialC{
+		.texture_count = 1,
+		.textures = &skyTexture,
+		.shader_count = 1,
+		.shaders = &skyShader,
+	}};
 	skyMat.upload(state, gbuffer, {}, {.depth_function = {}});
-	sl::auto_release<sl::model> sky{}; sky.zero();
-	sky.c().mesh_count = 1;
-	sky.c().meshes = {true, new sl::mesh(sl::mesh::fullscreen_mesh(state))};
-	sky.c().material_count = 1;
-	sky.c().materials = &skyMat;
-	sky.c().mesh_materials = nullptr;
+	sl::auto_release<sl::model> sky = sl::model::fullscreen_mesh(state, skyMat);
 
 	sl::auto_release<sl::gpu_buffer> utility_buffer;
 	sl::time time{};

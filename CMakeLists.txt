@@ -17,8 +17,10 @@ add_subdirectory(modules/stylizer/img)
 add_subdirectory(modules/stylizer/obj)
 add_subdirectory(modules/stylizer/window)
 
+add_subdirectory(modules/stylizer/pbr)
+
 add_executable(stylizer_tests test.cpp)
-target_link_libraries(stylizer_tests PUBLIC stylizer::core stylizer::img stylizer::obj stylizer::window)
+target_link_libraries(stylizer_tests PUBLIC stylizer::core stylizer::img stylizer::obj stylizer::window stylizer::pbr)
 
 if(EMSCRIPTEN)
 	set_target_properties(stylizer_tests PROPERTIES SUFFIX ".html")

@@ -3,7 +3,7 @@
 
 #ifndef __cplusplus
 	#include "config.h"
-	#include "optional.h"
+	#include "utility/optional.h"
 
 	#include <webgpu/webgpu.h>
 #endif

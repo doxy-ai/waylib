@@ -1,7 +1,7 @@
 #ifndef STYLIZER_WGSL_TYPES_IS_AVAILABLE
 #define STYLIZER_WGSL_TYPES_IS_AVAILABLE
 
-#include "config.hpp"
+#include "../config.hpp"
 
 #include <cstdint>
 // #define GLM_FORCE_MESSAGES

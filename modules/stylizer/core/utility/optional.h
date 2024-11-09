@@ -36,8 +36,8 @@
 		std::remove_reference_t<T>* operator->() noexcept { return &value; }
 		const std::remove_reference_t<T>* operator->() const noexcept { return &value; }
 	};
-	#ifdef STYLIZER_NAMESPACE_NAME
-		#define STYLIZER_OPTIONAL(type) STYLIZER_NAMESPACE_NAME::optional<type>
+	#ifdef STYLIZER_NAMESPACE
+		#define STYLIZER_OPTIONAL(type) STYLIZER_NAMESPACE::optional<type>
 	#else
 		#define STYLIZER_OPTIONAL(type) optional<type>
 	#endif

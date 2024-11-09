@@ -550,83 +550,19 @@ fn compute(@builtin(global_invocation_id) id: vec3<u32>) {
 }
 
 drawing_state texture::begin_drawing(wgpu_state& state, STYLIZER_OPTIONAL(colorC) clear_color /* = {} */, STYLIZER_OPTIONAL(gpu_buffer&) utility_buffer /* = {} */) {
-	static WGPUTextureViewDescriptor viewDesc = {
-		// .format = color.getFormat(),
-		.dimension = wgpu::TextureViewDimension::_2D,
-		.baseMipLevel = 0,
-		.mipLevelCount = 1,
-		.baseArrayLayer = 0,
-		.arrayLayerCount = 1,
-		// .aspect = wgpu::TextureAspect::DepthOnly,
-	};
-	static WGPUTextureFormat depthTextureFormat = wgpu::TextureFormat::Depth24Plus;
-	static WGPUTextureDescriptor depthTextureDesc = {
-		.usage = wgpu::TextureUsage::RenderAttachment,
-		.dimension = wgpu::TextureDimension::_2D,
-		.format = depthTextureFormat,
-		.mipLevelCount = 1,
-		.sampleCount = 1,
-		.viewFormatCount = 1,
-		.viewFormats = (WGPUTextureFormat*)&depthTextureFormat,
-	};
-
 	drawing_stateC out {.state = &state, .gbuffer = nullptr};
-	// static frame_finalizers finalizers;
+	// Create command encoders for the draw call
+	std::tie(out.render_encoder, out.pre_encoder) = begin_drawing_create_command_encoders(state);
 
-	// Create a command encoder for the draw call
-	wgpu::CommandEncoderDescriptor encoderDesc = {};
-	encoderDesc.label = toWGPU("Stylizer Render Command Encoder");
-	out.render_encoder = state.device.createCommandEncoder(encoderDesc);
-	encoderDesc.label = toWGPU("Stylizer Command Encoder");
-	out.pre_encoder = state.device.createCommandEncoder(encoderDesc);
-
+	// Create a depth texture
 	static texture depthTexture = {};
-	depthTextureDesc.size = {gpu_data.getWidth(), gpu_data.getHeight(), 1};
 	if(!depthTexture.gpu_data || depthTexture.size() != size()) {
-		if(depthTexture.gpu_data) depthTexture.gpu_data.release();
-		depthTexture.gpu_data = state.device.createTexture(depthTextureDesc);
-		depthTexture.create_view(wgpu::TextureAspect::DepthOnly);
+		depthTexture.release();
+		depthTexture = begin_drawing_create_depth_texture(state, size(), depthTextureFormat);
 	}
 
-
 	// Create the render pass that clears the screen with our color
-	wgpu::RenderPassDescriptor renderPassDesc = {};
-
-	// The attachment part of the render pass descriptor describes the target texture of the pass
-	wgpu::RenderPassColorAttachment colorAttachment = {};
-	colorAttachment.view = view;
-	colorAttachment.resolveTarget = nullptr;
-	colorAttachment.loadOp = clear_color ? wgpu::LoadOp::Clear : wgpu::LoadOp::Load;
-	colorAttachment.storeOp = wgpu::StoreOp::Store;
-	colorAttachment.clearValue = toWGPU(clear_color ? *clear_color : colorC{0, 0, 0, 1});
-	colorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
-
-	// We now add a depth/stencil attachment:
-	wgpu::RenderPassDepthStencilAttachment depthStencilAttachment;
-	depthStencilAttachment.view = /* support_depth ? */ depthTexture.view /* : nullptr */;
-	// The initial value of the depth buffer, meaning "far"
-	depthStencilAttachment.depthClearValue = 1.0f;
-	// Operation settings comparable to the color attachment
-	depthStencilAttachment.depthLoadOp = clear_color.has_value ? wgpu::LoadOp::Clear : wgpu::LoadOp::Load;
-	depthStencilAttachment.depthStoreOp = wgpu::StoreOp::Store;
-	// we could turn off writing to the depth buffer globally here
-	depthStencilAttachment.depthReadOnly = false;
-
-	// Stencil setup, mandatory but unused
-	depthStencilAttachment.stencilClearValue = 0;
-	// depthStencilAttachment.stencilLoadOp = clear_color.has_value ? wgpu::LoadOp::Clear : wgpu::LoadOp::Load;
-	// depthStencilAttachment.stencilStoreOp = wgpu::StoreOp::Store;
-	depthStencilAttachment.stencilLoadOp = wgpu::LoadOp::Undefined;
-	depthStencilAttachment.stencilStoreOp = wgpu::StoreOp::Undefined;
-	depthStencilAttachment.stencilReadOnly = true;
-
-	renderPassDesc.colorAttachmentCount = 1;
-	renderPassDesc.colorAttachments = &colorAttachment;
-	renderPassDesc.depthStencilAttachment = /* support_depth ? */ &depthStencilAttachment /* : nullptr */;
-	renderPassDesc.timestampWrites = nullptr;
-
-	// Create the render pass
-	out.render_pass = out.render_encoder.beginRenderPass(renderPassDesc);
+	out.render_pass = begin_drawing_create_render_pass(out.render_encoder, value2span(begin_drawing_create_color_attachment(view, clear_color)), {begin_drawing_create_depth_attachment(depthTexture.view, clear_color)});
 	static finalizer_list finalizers = {};
 	out.finalizers = &finalizers;
 
@@ -642,8 +578,8 @@ texture& texture::blit(drawing_state& draw, shader& blit_shader, bool dirty /* =
 		blitMaterial = &material_map[blit_shader.module];
 	else {
 		blitMaterial = &(material_map[blit_shader.module] = materialC{
+			.shader_count = 1,
 			.shaders = &blit_shader,
-			.shader_count = 1
 		});
 		auto target = texture::default_color_target_state(format());
 		blitMaterial->upload(draw.state(), {&target, 1}, {{}}, {.double_sided = true});
@@ -745,20 +681,10 @@ wgpu::BindGroup geometry_buffer::bind_group(struct drawing_state& draw, struct m
 	auto zeroBuffer = gpu_buffer::zero_buffer(draw.state(), minimum_utility_buffer_size, &draw);
 
 	std::array<WGPUBindGroupEntry, 1> entries = {
-		WGPUBindGroupEntry{
-			.binding = 0,
-			.buffer = zeroBuffer.gpu_data,
-			.offset = zeroBuffer.offset,
-			.size = zeroBuffer.size,
-		}
+		draw.utility_buffer_bind_group_entry()
 	};
-	if(draw.utility_buffer) {
-		entries[0].buffer = draw.utility_buffer->gpu_data;
-		entries[0].offset = draw.utility_buffer->offset;
-		entries[0].size = draw.utility_buffer->size;
-	}
 	return draw.state().device.createBindGroup(WGPUBindGroupDescriptor{ // TODO: free when done somehow...
-		.label = toWGPU("Stylizer Compute Texture Bind Group"),
+		.label = toWGPU("Stylizer Gbuffer Bind Group"),
 		.layout = mat.pipeline.getBindGroupLayout(0),
 		.entryCount = entries.size(),
 		.entries = entries.data()
@@ -767,67 +693,17 @@ wgpu::BindGroup geometry_buffer::bind_group(struct drawing_state& draw, struct m
 
 drawing_state geometry_buffer::begin_drawing(wgpu_state& state, STYLIZER_OPTIONAL(colorC) clear_color /* = {} */, STYLIZER_OPTIONAL(gpu_buffer&) utility_buffer /* = {} */) {
 	drawing_stateC out {.state = &state, .gbuffer = this};
-	// static frame_finalizers finalizers;
-
-	// Create a command encoder for the draw call
-	wgpu::CommandEncoderDescriptor encoderDesc = {};
-	encoderDesc.label = toWGPU("Stylizer Render Command Encoder");
-	out.render_encoder = state.device.createCommandEncoder(encoderDesc);
-	encoderDesc.label = toWGPU("Stylizer Command Encoder");
-	out.pre_encoder = state.device.createCommandEncoder(encoderDesc);
-
-
-	// Create the render pass that clears the screen with our color
-	wgpu::RenderPassDescriptor renderPassDesc = {};
-
-	// The attachment part of the render pass descriptor describes the target texture of the pass
-	std::array<wgpu::RenderPassColorAttachment, 2> colorAttachments = {};
-	// Color Attachment
-	colorAttachments[0].view = color().view;
-	colorAttachments[0].resolveTarget = nullptr;
-	colorAttachments[0].loadOp = clear_color ? wgpu::LoadOp::Clear : wgpu::LoadOp::Load;
-	colorAttachments[0].storeOp = wgpu::StoreOp::Store;
-	colorAttachments[0].clearValue = toWGPU(clear_color ? *clear_color : colorC{0, 0, 0, 0});
-	colorAttachments[0].depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
-	// Normal Attachment
-	colorAttachments[1].view = normal().view;
-	colorAttachments[1].resolveTarget = nullptr;
-	colorAttachments[1].loadOp = clear_color ? wgpu::LoadOp::Clear : wgpu::LoadOp::Load;
-	colorAttachments[1].storeOp = wgpu::StoreOp::Store;
-	colorAttachments[1].clearValue = {0, 0, 0, 0};
-	colorAttachments[1].depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
-
-	// We now add a depth/stencil attachment:
-	wgpu::RenderPassDepthStencilAttachment depthStencilAttachment;
-	depthStencilAttachment.view = depth().view;
-	// The initial value of the depth buffer, meaning "far"
-	depthStencilAttachment.depthClearValue = 1.0f;
-	// Operation settings comparable to the color attachment
-	depthStencilAttachment.depthLoadOp = clear_color.has_value ? wgpu::LoadOp::Clear : wgpu::LoadOp::Load;
-	depthStencilAttachment.depthStoreOp = wgpu::StoreOp::Store;
-	// we could turn off writing to the depth buffer globally here
-	depthStencilAttachment.depthReadOnly = false;
-
-	// Stencil setup, mandatory but unused
-	depthStencilAttachment.stencilClearValue = 0;
-	// depthStencilAttachment.stencilLoadOp = clear_color.has_value ? wgpu::LoadOp::Clear : wgpu::LoadOp::Load;
-	// depthStencilAttachment.stencilStoreOp = wgpu::StoreOp::Store;
-	depthStencilAttachment.stencilLoadOp = wgpu::LoadOp::Undefined;
-	depthStencilAttachment.stencilStoreOp = wgpu::StoreOp::Undefined;
-	depthStencilAttachment.stencilReadOnly = true;
-
-	renderPassDesc.colorAttachmentCount = colorAttachments.size();
-	renderPassDesc.colorAttachments = colorAttachments.data();
-	renderPassDesc.depthStencilAttachment = &depthStencilAttachment;
-	renderPassDesc.timestampWrites = nullptr;
+	// Create command encoders for the draw call
+	std::tie(out.render_encoder, out.pre_encoder) = begin_drawing_create_command_encoders(state);
 
 	// Create the render pass
-	out.render_pass = out.render_encoder.beginRenderPass(renderPassDesc);
+	std::array<wgpu::RenderPassColorAttachment, 2> colorAttachments = {begin_drawing_create_color_attachment(color().view, clear_color), begin_drawing_create_color_attachment(normal().view, clear_color)};
+	out.render_pass = begin_drawing_create_render_pass(out.render_encoder, colorAttachments, begin_drawing_create_depth_attachment(depth().view, clear_color));
 	static finalizer_list finalizers = {};
 	out.finalizers = &finalizers;
 
 	if(utility_buffer) out.utility_buffer = static_cast<gpu_bufferC*>(&utility_buffer.value);
-	return {{std::move(out)}};
+	return out;
 }
 
 
@@ -968,5 +844,80 @@ wgpu::PresentMode determine_best_presentation_mode(WGPUAdapter adapter, WGPUSurf
 #endif
 	return wgpu::PresentMode::Fifo; // Always supported
 }
+
+
+
+
+std::pair<wgpu::CommandEncoder, wgpu::CommandEncoder> begin_drawing_create_command_encoders(wgpu_state& state) {
+	wgpu::CommandEncoderDescriptor encoderDesc = {};
+	encoderDesc.label = toWGPU("Stylizer Render Command Encoder");
+	auto render = state.device.createCommandEncoder(encoderDesc);
+	encoderDesc.label = toWGPU("Stylizer Command Encoder");
+	auto pre = state.device.createCommandEncoder(encoderDesc);
+
+	return {render, pre};
+}
+
+texture begin_drawing_create_depth_texture(wgpu_state& state, vec2u size, WGPUTextureFormat depth_texture_format) {
+	static WGPUTextureDescriptor depthTextureDesc = {
+		.usage = wgpu::TextureUsage::RenderAttachment,
+		.dimension = wgpu::TextureDimension::_2D,
+		.format = depth_texture_format,
+		.mipLevelCount = 1,
+		.sampleCount = 1,
+		.viewFormatCount = 1,
+		// .viewFormats = &depthTextureFormat,
+	};
+	depthTextureDesc.viewFormats = &depth_texture_format;
+	depthTextureDesc.size = {size.x, size.y, 1};
+
+	texture out{};
+	out.gpu_data = state.device.createTexture(depthTextureDesc);
+	out.create_view(wgpu::TextureAspect::DepthOnly);
+	return out;
+}
+
+wgpu::RenderPassColorAttachment begin_drawing_create_color_attachment(wgpu::TextureView view, STYLIZER_OPTIONAL(colorC) clear_color) {
+	wgpu::RenderPassColorAttachment colorAttachment{};
+	colorAttachment.view = view;
+	colorAttachment.resolveTarget = nullptr;
+	colorAttachment.loadOp = clear_color ? wgpu::LoadOp::Clear : wgpu::LoadOp::Load;
+	colorAttachment.storeOp = wgpu::StoreOp::Store;
+	colorAttachment.clearValue = toWGPU(clear_color ? *clear_color : colorC{0, 0, 0, 1});
+	colorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
+	return colorAttachment;
+}
+
+wgpu::RenderPassDepthStencilAttachment begin_drawing_create_depth_attachment(wgpu::TextureView view, STYLIZER_OPTIONAL(colorC) clear_color) {
+	wgpu::RenderPassDepthStencilAttachment depthStencilAttachment{};
+	depthStencilAttachment.view = /* support_depth ? */ view /* : nullptr */;
+	// The initial value of the depth buffer, meaning "far"
+	depthStencilAttachment.depthClearValue = 1.0f;
+	// Operation settings comparable to the color attachment
+	depthStencilAttachment.depthLoadOp = clear_color.has_value ? wgpu::LoadOp::Clear : wgpu::LoadOp::Load;
+	depthStencilAttachment.depthStoreOp = wgpu::StoreOp::Store;
+	// we could turn off writing to the depth buffer globally here
+	depthStencilAttachment.depthReadOnly = false;
+
+	// Stencil setup, mandatory but unused
+	depthStencilAttachment.stencilClearValue = 0;
+	// depthStencilAttachment.stencilLoadOp = clear_color.has_value ? wgpu::LoadOp::Clear : wgpu::LoadOp::Load;
+	// depthStencilAttachment.stencilStoreOp = wgpu::StoreOp::Store;
+	depthStencilAttachment.stencilLoadOp = wgpu::LoadOp::Undefined;
+	depthStencilAttachment.stencilStoreOp = wgpu::StoreOp::Undefined;
+	depthStencilAttachment.stencilReadOnly = true;
+	return depthStencilAttachment;
+}
+
+wgpu::RenderPassEncoder begin_drawing_create_render_pass(wgpu::CommandEncoder encoder, std::span<wgpu::RenderPassColorAttachment> color_attachments, STYLIZER_OPTIONAL(wgpu::RenderPassDepthStencilAttachment) depth_attachment) {
+	wgpu::RenderPassDescriptor renderPassDesc = {};
+	renderPassDesc.colorAttachmentCount = color_attachments.size();
+	renderPassDesc.colorAttachments = color_attachments.data();
+	renderPassDesc.depthStencilAttachment = depth_attachment ? &depth_attachment.value : nullptr;
+	renderPassDesc.timestampWrites = nullptr;
+	return encoder.beginRenderPass(renderPassDesc);
+}
+
+
 
 STYLIZER_END_NAMESPACE

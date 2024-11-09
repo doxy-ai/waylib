@@ -221,7 +221,9 @@ typedef struct gpu_bufferC {
 // Geometry Buffer
 typedef struct STYLIZER_PREFIXED_C_CPP_TYPE(geometry_buffer, geometry_bufferC) {
 	STYLIZER_NULLABLE(STYLIZER_PREFIXED_C_CPP_TYPE(geometry_buffer, geometry_bufferC)*) previous;
-	STYLIZER_PREFIXED_C_CPP_TYPE(texture, textureC) color, depth, normal;
+	STYLIZER_PREFIXED_C_CPP_TYPE(texture, textureC) color;
+	STYLIZER_PREFIXED_C_CPP_TYPE(texture, textureC) depth;
+	STYLIZER_PREFIXED_C_CPP_TYPE(texture, textureC)	normal; // Normal (xyz), Material ID (w)
 } STYLIZER_PREFIXED_C_CPP_TYPE(geometry_buffer, geometry_bufferC);
 
 // Drawing State
@@ -260,8 +262,8 @@ typedef struct {
 	index_t texture_count;
 	STYLIZER_MANAGEABLE(STYLIZER_NULLABLE(STYLIZER_PREFIXED_C_CPP_TYPE(texture, textureC)*)) textures;
 
-	STYLIZER_MANAGEABLE(STYLIZER_PREFIXED_C_CPP_TYPE(shader, shaderC)*) shaders;
 	STYLIZER_PREFIXED(index_t) shader_count;
+	STYLIZER_MANAGEABLE(STYLIZER_PREFIXED_C_CPP_TYPE(shader, shaderC)*) shaders;
 	STYLIZER_C_OR_CPP_TYPE(WGPURenderPipeline, wgpu::RenderPipeline) pipeline;
 	STYLIZER_NULLABLE(STYLIZER_C_OR_CPP_TYPE(WGPUBindGroup, wgpu::BindGroup)) bind_group;
 } STYLIZER_PREFIXED_C_CPP_TYPE(material, materialC);

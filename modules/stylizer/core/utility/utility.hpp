@@ -1,14 +1,17 @@
 #pragma once
-#include "config.hpp"
+#include "../config.hpp"
 
-#include "thirdparty/thread_pool.hpp"
-#include "optional.h"
+#include "../thirdparty/thread_pool.hpp"
+
+#include <span>
 
 #ifdef __cpp_exceptions
 	#include <stdexcept>
 #endif
 
 STYLIZER_BEGIN_NAMESPACE
+
+	#include "optional.h"
 
 	template<typename T>
 	concept releasable = requires(T t) {
@@ -36,6 +39,15 @@ STYLIZER_BEGIN_NAMESPACE
 		type& operator=(const type&) = default;\
 		type(type ## C&& c) : type ## C(std::move(c)) {}\
 		type& zero() { std::memset(this, 0, sizeof(type)); return *this; }
+
+	#define STYLIZER_GENERIC_AUTO_RELEASE_SUPPORT_SUB_NAMESPACE(type, ns)\
+		using ns::type ## C::type ## C;\
+		inline ns::type ## C& c() { return *this; }\
+		type() {}\
+		type(const ns::type&) = default;\
+		ns::type& operator=(const ns::type&) = default;\
+		type(ns::type ## C&& c) : ns::type ## C(std::move(c)) {}\
+		ns::type& zero() { std::memset(this, 0, sizeof(ns::type)); return *this; }
 
 
 //////////////////////////////////////////////////////////////////////
@@ -159,6 +171,10 @@ STYLIZER_BEGIN_NAMESPACE
 // # Miscelanious
 //////////////////////////////////////////////////////////////////////
 
+	template<typename T>
+	std::span<T> value2span(const T& value) {
+		return std::span<T>{(T*)&value, 1};
+	}
 
 	template<typename F, typename... Args>
 	auto closure2function_pointer(const F& _f, Args...) {

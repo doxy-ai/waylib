@@ -25,8 +25,8 @@
 		auto& operator[](size_t i) noexcept { return value[i]; }
 		const auto& operator[](size_t i) const noexcept { return value[i]; }
 	};
-	#ifdef STYLIZER_NAMESPACE_NAME
-		#define STYLIZER_MANAGEABLE(type) STYLIZER_NAMESPACE_NAME::managable<type>
+	#ifdef STYLIZER_NAMESPACE
+		#define STYLIZER_MANAGEABLE(type) STYLIZER_NAMESPACE::managable<type>
 	#else
 		#define STYLIZER_MANAGEABLE(type) managable<type>
 	#endif

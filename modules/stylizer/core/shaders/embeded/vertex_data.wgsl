@@ -1,5 +1,7 @@
 #pragma once
 
+#define STYLIZER_VERTEX_IS_AVAILABLE
+
 // TODO: Does it make more sense for this to go in its own file?
 struct instance_data {
 	transform: mat4x4f,
@@ -30,12 +32,14 @@ struct vertex_output {
 	@location(8) curvature: f32,
 	@location(9) thickness: f32,
 	@location(10) @interpolate(flat) adjacency: vec2<u32>,
-	@location(11) color: vec4f,
-	@location(12) @interpolate(flat) bones: vec4u, // TODO: Does fragment shader need to know about bones?
-	@location(13) bone_weights: vec4f,
+	@location(11) @interpolate(flat) vertex_index: u32,
+	@location(12) @interpolate(flat) instance_index: u32,
+	@location(13) color: vec4f,
+	@location(14) @interpolate(flat) bones: vec4u, // TODO: Does fragment shader need to know about bones?
+	@location(15) bone_weights: vec4f,
 }
 
-fn unpack_vertex_input(in: vertex_input) -> vertex_output {
+fn unpack_vertex_input(in: vertex_input, vertex_index: u32, instance_index: u32) -> vertex_output {
 	return vertex_output(
 		vec4f(in.position.xyz, 1), // builtin_position
 		in.position.xyz, // position
@@ -49,6 +53,8 @@ fn unpack_vertex_input(in: vertex_input) -> vertex_output {
 		in.cta.x, // curvature
 		in.cta.y, // thickness
 		bitcast<vec2<u32>>(in.cta.zw), // adjacency
+		vertex_index,
+		instance_index,
 		in.color, // color
 		in.bones, // bones
 		in.bone_weights, // bone_weights
@@ -70,9 +76,9 @@ fn vertex_output_generate_bitangent(in: vertex_output) -> vertex_output {
 	return out;
 }
 
-fn unpack_vertex_input_full(in: vertex_input, model_matrix: mat4x4f, view_projection_matrix: mat4x4f) -> vertex_output {
+fn unpack_vertex_input_full(in: vertex_input, vertex_index: u32, instance_index: u32, model_matrix: mat4x4f, view_projection_matrix: mat4x4f) -> vertex_output {
 	return vertex_output_generate_bitangent(
-		vertex_output_apply_model_view_projection_matrix(unpack_vertex_input(in), model_matrix, view_projection_matrix)
+		vertex_output_apply_model_view_projection_matrix(unpack_vertex_input(in, vertex_index, instance_index), model_matrix, view_projection_matrix)
 	);
 }
 

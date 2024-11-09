@@ -10,8 +10,6 @@
 #include <filesystem>
 #include <unordered_map>
 
-#include "utility.hpp"
-
 namespace wgsl_preprocess {
 
 	namespace detail {
@@ -86,7 +84,7 @@ namespace wgsl_preprocess {
 		}
 
 		std::string process_from_memory(std::string_view data_, const config& config) {
-			struct PreprocessFailed { std::string what; };
+			struct PreprocessFailed : std::runtime_error { using std::runtime_error::runtime_error; };
 
 			auto data = std::make_unique<tcpp::StringInputStream>(defines_string() + std::string(data_) + "\n");
 			tcpp::Lexer lexer(std::move(data));
