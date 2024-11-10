@@ -137,9 +137,9 @@ drawing_state wgpu_state::begin_drawing_to_surface(STYLIZER_OPTIONAL(colorC) cle
 //////////////////////////////////////////////////////////////////////
 
 
-texture image::upload(wgpu_state& state, texture_create_configuration config /* = {} */, bool take_ownership_of_image /* = true */) {
+texture image::upload(wgpu_state& state, texture_create_configuration config /* = {} */, STYLIZER_OPTIONAL(std::string_view) label /* = {} */, bool take_ownership_of_image /* = true */) {
 	config.format = config.format ? *config.format : static_cast<WGPUTextureFormat>(convert_format(format));
-	auto out = texture::create(state, vec3u(size, frames), config);
+	auto out = texture::create(state, vec3u(size, frames), config, label);
 
 	wgpu::ImageCopyTexture destination;
 	destination.texture = out.gpu_data;
@@ -161,11 +161,11 @@ texture image::upload(wgpu_state& state, texture_create_configuration config /* 
 	return out;
 }
 
-cube_texture image::upload_frames_as_cube(wgpu_state& state, texture_create_configuration config /* = {} */, bool take_ownership_of_image /* = true */) {
+cube_texture image::upload_frames_as_cube(wgpu_state& state, texture_create_configuration config /* = {} */, STYLIZER_OPTIONAL(std::string_view) label /* = {} */, bool take_ownership_of_image /* = true */) {
 	config.format = config.format ? *config.format : static_cast<WGPUTextureFormat>(convert_format(format));
 	auto with_view = config.with_view;
 	config.with_view = false;
-	auto out = cube_texture::create(state, vec3u(size, frames), config);
+	auto out = cube_texture::create(state, vec3u(size, frames), config, label);
 
 	wgpu::ImageCopyTexture destination;
 	destination.texture = out.gpu_data;
@@ -566,6 +566,11 @@ drawing_state texture::begin_drawing(wgpu_state& state, STYLIZER_OPTIONAL(colorC
 	static finalizer_list finalizers = {};
 	out.finalizers = &finalizers;
 
+	// Set the bind group callback
+	out.gbuffer = nullptr;
+	out.gbuffer_bind_group_function = +[](drawing_stateC* draw_, sl::materialC* mat) -> wgpu::BindGroup {
+		return nullptr;
+	};
 	if(utility_buffer) out.utility_buffer = static_cast<gpu_bufferC*>(&utility_buffer.value);
 	return {{std::move(out)}};
 }
@@ -658,7 +663,7 @@ drawing_state texture::blit_to(wgpu_state& state, shader& blit_shader, texture& 
 //////////////////////////////////////////////////////////////////////
 
 
-gpu_buffer gpu_buffer::zero_buffer(wgpu_state& state, size_t minimum_size /* = 0 */, drawing_state* draw /* = nullptr */) {
+const gpu_buffer& gpu_buffer::zero_buffer(wgpu_state& state, size_t minimum_size /* = 0 */, drawing_state* draw /* = nullptr */) {
 	static gpu_buffer zeroBuffer{};
 
 	if(!zeroBuffer || minimum_size > zeroBuffer.size) {
@@ -677,12 +682,16 @@ gpu_buffer gpu_buffer::zero_buffer(wgpu_state& state, size_t minimum_size /* = 0
 //////////////////////////////////////////////////////////////////////
 
 
-wgpu::BindGroup geometry_buffer::bind_group(struct drawing_state& draw, struct material& mat) {
-	auto zeroBuffer = gpu_buffer::zero_buffer(draw.state(), minimum_utility_buffer_size, &draw);
-
-	std::array<WGPUBindGroupEntry, 1> entries = {
+wgpu::BindGroup geometry_buffer::bind_group(drawing_state& draw, materialC& mat) {
+	// Bind utility buffer
+	std::array<WGPUBindGroupEntry, 7> entries = {
 		draw.utility_buffer_bind_group_entry()
 	};
+
+	// Bind previous textures
+	uint32_t binding = 1;
+	bind_group_bind_previous_textures(draw.state(), static_cast<geometry_buffer*>(previous), 3, entries, binding);
+
 	return draw.state().device.createBindGroup(WGPUBindGroupDescriptor{ // TODO: free when done somehow...
 		.label = toWGPU("Stylizer Gbuffer Bind Group"),
 		.layout = mat.pipeline.getBindGroupLayout(0),
@@ -702,6 +711,11 @@ drawing_state geometry_buffer::begin_drawing(wgpu_state& state, STYLIZER_OPTIONA
 	static finalizer_list finalizers = {};
 	out.finalizers = &finalizers;
 
+	// Set the bind group callback
+	out.gbuffer_bind_group_function = +[](drawing_stateC* draw_, materialC* mat) {
+		auto& draw = (drawing_state&)*draw_;
+		return draw.gbuffer().bind_group(draw, *mat);
+	};
 	if(utility_buffer) out.utility_buffer = static_cast<gpu_bufferC*>(&utility_buffer.value);
 	return out;
 }
@@ -860,13 +874,15 @@ std::pair<wgpu::CommandEncoder, wgpu::CommandEncoder> begin_drawing_create_comma
 
 texture begin_drawing_create_depth_texture(wgpu_state& state, vec2u size, WGPUTextureFormat depth_texture_format) {
 	static WGPUTextureDescriptor depthTextureDesc = {
-		.usage = wgpu::TextureUsage::RenderAttachment,
+		.label = toWGPU("Stylizer Depth Texture"),
+		.usage = wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::TextureBinding,
 		.dimension = wgpu::TextureDimension::_2D,
 		.format = depth_texture_format,
 		.mipLevelCount = 1,
 		.sampleCount = 1,
 		.viewFormatCount = 1,
 		// .viewFormats = &depthTextureFormat,
+		// .size = ...
 	};
 	depthTextureDesc.viewFormats = &depth_texture_format;
 	depthTextureDesc.size = {size.x, size.y, 1};

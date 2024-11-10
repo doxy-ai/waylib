@@ -226,14 +226,20 @@ typedef struct STYLIZER_PREFIXED_C_CPP_TYPE(geometry_buffer, geometry_bufferC) {
 	STYLIZER_PREFIXED_C_CPP_TYPE(texture, textureC)	normal; // Normal (xyz), Material ID (w)
 } STYLIZER_PREFIXED_C_CPP_TYPE(geometry_buffer, geometry_bufferC);
 
+typedef STYLIZER_C_OR_CPP_TYPE(WGPUBindGroup, wgpu::BindGroup) (gbuffer_bind_group_function_type) (
+	struct STYLIZER_PREFIXED_C_CPP_TYPE(drawing_state, drawing_stateC)* draw, 
+	struct STYLIZER_PREFIXED_C_CPP_TYPE(material, materialC)* mat
+);
+
 // Drawing State
-typedef struct {
+typedef struct STYLIZER_PREFIXED_C_CPP_TYPE(drawing_state, drawing_stateC) {
 	STYLIZER_PREFIXED_C_CPP_TYPE(wgpu_state, wgpu_stateC)* state;
 	STYLIZER_NULLABLE(STYLIZER_PREFIXED_C_CPP_TYPE(geometry_buffer, geometry_bufferC)*) gbuffer;
 	STYLIZER_NULLABLE(STYLIZER_PREFIXED_C_CPP_TYPE(gpu_buffer, gpu_bufferC)*) utility_buffer;
 	STYLIZER_C_OR_CPP_TYPE(WGPUCommandEncoder, wgpu::CommandEncoder) pre_encoder, render_encoder;
 	STYLIZER_C_OR_CPP_TYPE(WGPURenderPassEncoder, wgpu::RenderPassEncoder) render_pass;
 	STYLIZER_PREFIXED(finalizer_list)* finalizers;
+	gbuffer_bind_group_function_type* gbuffer_bind_group_function;
 } STYLIZER_PREFIXED_C_CPP_TYPE(drawing_state, drawing_stateC);
 
 // Shader
@@ -256,7 +262,7 @@ typedef struct {
 } STYLIZER_PREFIXED_C_CPP_TYPE(computer, computerC);
 
 // Material
-typedef struct {
+typedef struct STYLIZER_PREFIXED_C_CPP_TYPE(material, materialC) {
 	index_t buffer_count;
 	STYLIZER_MANAGEABLE(STYLIZER_NULLABLE(STYLIZER_PREFIXED_C_CPP_TYPE(gpu_buffer, gpu_bufferC)*)) buffers;
 	index_t texture_count;

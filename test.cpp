@@ -14,6 +14,11 @@ int main() {
 	}});
 	window.auto_resize_gbuffer(state, gbuffer);
 
+	// Secondary layer of gbuffer used to combine results
+	sl::auto_release presentGbuffer = gbuffer.clone(state);
+	window.auto_resize_gbuffer(state, presentGbuffer);
+	presentGbuffer.previous = &gbuffer;
+
 	auto p = sl::pbr::initialize_shader_preprocessor(sl::shader_preprocessor{}.initialize(state));
 	sl::auto_release shader = sl::shader::from_wgsl(state, R"_(
 #define STYLIZER_CAMERA_DATA_IS_3D
@@ -28,7 +33,7 @@ fn vertex(in: vertex_input, @builtin(vertex_index) vertex_index: u32, @builtin(i
 
 @fragment
 fn fragment(vert: vertex_output) -> fragment_output {
-	// if false { ensure_material_layout(); }
+	if false { ensure_gbuffer_fragment_layout(); }
 	let mat = build_default_pbr_material(material_settings, vert);
 	return fragment_output(
 		mat.albedo,
@@ -38,8 +43,14 @@ fn fragment(vert: vertex_output) -> fragment_output {
 }
 	)_", {.vertex_entry_point = "vertex", .fragment_entry_point = "fragment", .preprocessor = &p});
 
-	sl::auto_release texture = std::move(sl::img::load("../resources/test.hdr")
-		.upload(state, {.sampler_type = sl::texture_create_sampler_type::Nearest})
+	sl::auto_release albedoTexture = std::move(sl::img::load("../resources/pbr/Ground068_2K-PNG_Color.png")
+		.upload(state, {.sampler_type = sl::texture_create_sampler_type::Trilinear}, {"Albedo Texture"})
+		.generate_mipmaps(state));
+	// sl::auto_release normalTexture = std::move(sl::img::load("../resources/pbr/Ground068_2K-PNG_NormalDX.png")
+	// 	.upload(state, {.sampler_type = sl::texture_create_sampler_type::Trilinear}, {"Normal Texture"})
+	// 	.generate_mipmaps(state));
+	sl::auto_release packedTexture = std::move(sl::img::load("../resources/pbr/Ground068_2K-PNG_Packed.png")
+		.upload(state, {.sampler_type = sl::texture_create_sampler_type::Trilinear}, {"Packed Texture"})
 		.generate_mipmaps(state));
 
 	sl::auto_release model = sl::obj::load("../resources/suzane_highpoly.obj");
@@ -49,8 +60,11 @@ fn fragment(vert: vertex_output) -> fragment_output {
 		.shader_count = 1,
 		.shaders = &shader,
 	}});
-	material.albedo_texture = &texture;
-	material.upload(state, gbuffer);
+	material.albedo_texture = &albedoTexture;
+	// material.normal_texture = &normalTexture; material.normal_strength = 1;
+	material.packed_texture = &packedTexture;
+	material.material_id = 1;
+	material.upload(state, gbuffer, {}, {.double_sided = true});
 	model.c().material_count = 1;
 	model.c().materials = &material;
 	model.c().mesh_materials = nullptr;
@@ -62,7 +76,7 @@ fn fragment(vert: vertex_output) -> fragment_output {
 		"../resources/skybox/right.jpg", "../resources/skybox/left.jpg",
 		"../resources/skybox/top.jpg", "../resources/skybox/bottom.jpg",
 		"../resources/skybox/front.jpg", "../resources/skybox/back.jpg"
-	}).upload_frames_as_cube(state, {.sampler_type = sl::texture_create_sampler_type::Trilinear});
+	}).upload_frames_as_cube(state, {.sampler_type = sl::texture_create_sampler_type::Trilinear}, {"Sky Cubemap"});
 	sl::auto_release skyShader = sl::shader::from_wgsl(state, R"_(
 #define STYLIZER_CAMERA_DATA_IS_3D
 #include <stylizer/pbr/gbuffer>
@@ -79,6 +93,8 @@ fn vertex(in: vertex_input, @builtin(vertex_index) vertex_index: u32, @builtin(i
 
 @fragment
 fn fragment(vert: vertex_output) -> fragment_output {
+	if false { ensure_gbuffer_fragment_layout(); }
+
 	// Calculate the direction of the pixel
 	let clipSpacePos = vec4(vert.position.xy, 1, 1);
 	let V = inverse_view_matrix(utility.camera.view_matrix);
@@ -102,6 +118,68 @@ fn fragment(vert: vertex_output) -> fragment_output {
 	skyMat.upload(state, gbuffer, {}, {.depth_function = {}});
 	sl::auto_release<sl::model> sky = sl::model::fullscreen_mesh(state, skyMat);
 
+	sl::auto_release combineShader = sl::shader::from_wgsl(state, R"_(
+#define STYLIZER_CAMERA_DATA_IS_3D
+#include <stylizer/pbr/gbuffer>
+#include <stylizer/pbr/combiners>
+
+@vertex
+fn vertex(in: vertex_input, @builtin(vertex_index) vertex_index: u32, @builtin(instance_index) instance_index: u32) -> vertex_output {
+	if false { ensure_gbuffer_layout(); }
+	return unpack_vertex_input(in, vertex_index, instance_index);
+}
+
+const light = light_data(
+	0,
+	vec3(0),
+	normalize(vec3f(1, -1, 1)),
+	vec4f(.992, .937, .914, 1),
+	1,
+	0, 0, 0, 0, 0
+);
+
+@fragment
+fn fragment(vert: vertex_output) -> fragment_output_with_depth {
+	if false { ensure_gbuffer_fragment_layout(); }
+
+	var uv = vert.position.xy * .5 + .5;
+	uv.y = 1 - uv.y;
+
+	let color = textureSample(previous_color_texture, previous_color_sampler, uv);
+	let depth = textureSample(previous_depth_texture, previous_depth_sampler, uv);
+	let normal_and_id = textureSample(previous_normal_texture, previous_normal_sampler, uv);
+	let packed = textureSample(previous_packed_texture, previous_packed_sampler, uv);
+
+	let mat = pbr_material(
+		color,
+		vec4f(0),
+		normal_and_id.xyz,
+		vec3f(0),
+		packed.r,
+		packed.g,
+		packed.b
+	);
+
+	var out = color.rgb;
+	if u32(normal_and_id.a) > 0 { // Don't apply shading to the skybox (matID = 0 in previous shaders)
+		out = pbr_metalrough(light, mat, vert).rgb + pbr_simple_ambient(light, mat, vert).rgb;
+	}
+
+	return fragment_output_with_depth(
+		vec4(out, 1),
+		depth,
+		normal_and_id,
+		packed,
+	);
+}
+	)_", {.vertex_entry_point = "vertex", .fragment_entry_point = "fragment", .preprocessor = &p});
+	sl::auto_release<sl::material> combineMat = {sl::materialC{
+		.shader_count = 1,
+		.shaders = &combineShader,
+	}};
+	combineMat.upload(state, gbuffer, {}, {.depth_function = {}});
+	sl::auto_release combiner = sl::model::fullscreen_mesh(state, combineMat);
+
 	sl::auto_release<sl::gpu_buffer> utility_buffer;
 	sl::time time{};
 	sl::camera3D camera = sl::camera3DC{.position = {0, 1, -1}, .target_position = sl::vec3f(0)};
@@ -121,8 +199,12 @@ fn fragment(vert: vertex_output) -> fragment_output {
 		}
 		draw.draw();
 
+		draw = presentGbuffer.begin_drawing(state, {}, utility_buffer);
+			combiner.draw(draw);
+		draw.draw();
+
 		// Present gbuffer's color
-		window.present(state, gbuffer.color());
+		window.present(state, presentGbuffer.color());
 	// }
 	);
 }

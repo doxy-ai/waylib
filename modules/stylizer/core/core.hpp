@@ -205,7 +205,7 @@ STYLIZER_BEGIN_NAMESPACE
 					return sizeof(**gray);
 				case image_format::Gray8:
 					return sizeof(**gray8);
-				default: assert(false && "An error has occurred finding the number of bytes per pixel!");
+				default: STYLIZER_THROW("An error has occurred finding the number of bytes per pixel!");
 			}
 		}
 		inline size_t bytes_per_pixel() { return bytes_per_pixel(format); }
@@ -241,8 +241,8 @@ STYLIZER_BEGIN_NAMESPACE
 			return out;
 		}
 
-		struct texture upload(wgpu_state& state, texture_create_configuration config = {}, bool take_ownership_of_image = true);
-		struct cube_texture upload_frames_as_cube(wgpu_state& state, texture_create_configuration config = {}, bool take_ownership_of_image = true);
+		struct texture upload(wgpu_state& state, texture_create_configuration config = {}, STYLIZER_OPTIONAL(std::string_view) label = {}, bool take_ownership_of_image = true);
+		struct cube_texture upload_frames_as_cube(wgpu_state& state, texture_create_configuration config = {}, STYLIZER_OPTIONAL(std::string_view) label = {}, bool take_ownership_of_image = true);
 	};
 
 
@@ -260,8 +260,7 @@ STYLIZER_BEGIN_NAMESPACE
 
 	struct texture: public textureC {
 		STYLIZER_GENERIC_AUTO_RELEASE_SUPPORT(texture)
-		texture(texture&& other) { *this = std::move(other); }
-		texture& operator=(texture&& other) {
+		texture(texture&& other) { *this = std::move(other); }		texture& operator=(texture&& other) {
 			cpu_data = std::exchange(other.cpu_data, nullptr);
 			gpu_data = std::exchange(other.gpu_data, nullptr);
 			view = std::exchange(other.view, nullptr);
@@ -310,7 +309,7 @@ STYLIZER_BEGIN_NAMESPACE
 				.mipLevelCount = mip_count,
 				.baseArrayLayer = 0,
 				.arrayLayerCount = 1,
-				.aspect = aspect
+				.aspect = aspect,
 			});
 		}
 
@@ -320,11 +319,11 @@ STYLIZER_BEGIN_NAMESPACE
 			return *this;
 		}
 
-		static texture create(wgpu_state& state, vec3u size, texture_create_configuration config = {}) {
+		static texture create(wgpu_state& state, vec3u size, texture_create_configuration config = {}, STYLIZER_OPTIONAL(std::string_view) label = {}) {
 			texture out;
 			auto format = config.format ? *config.format : wgpu::TextureFormat::RGBA8UnormSrgb;
 			out.gpu_data = state.device.createTexture(WGPUTextureDescriptor {
-				.label = toWGPU("Stylizer Texture"),
+				.label = toWGPU(label ? *label : "Stylizer Texture"),
 				.usage = config.usage,
 				.dimension = wgpu::TextureDimension::_2D,
 				.size = {size.x, size.y, size.z},
@@ -345,12 +344,17 @@ STYLIZER_BEGIN_NAMESPACE
 			}
 			return out;
 		}
-		static texture create(wgpu_state& state, vec2u size, texture_create_configuration config = {}) {
-			return create(state, {size.x, size.y, 1}, config);
+		static texture create(wgpu_state& state, vec2u size, texture_create_configuration config = {}, STYLIZER_OPTIONAL(std::string_view) label = {}) {
+			return create(state, {size.x, size.y, 1}, config, label);
 		}
 
 		static const texture& default_texture(wgpu_state& state) {
-			static auto_release<texture> def = image::texture_not_found().upload(state);
+			static auto_release<texture> def = image::texture_not_found().upload(state, {}, {"Stylizer Default Texture"});
+			return def;
+		}
+
+		static const texture& default_depth_texture(wgpu_state& state) {
+			static auto_release<texture> def = begin_drawing_create_depth_texture(state, {1, 1}, depthTextureFormat);
 			return def;
 		}
 
@@ -455,7 +459,7 @@ STYLIZER_BEGIN_NAMESPACE
 
 
 	struct cube_texture: public texture {
-		static cube_texture create(wgpu_state& state, vec3u size, texture_create_configuration config = {}) {
+		static cube_texture create(wgpu_state& state, vec3u size, texture_create_configuration config = {}, STYLIZER_OPTIONAL(std::string_view) label = {}) {
 			assert(size.z % 6 == 0);
 
 			cube_texture out;
@@ -463,7 +467,7 @@ STYLIZER_BEGIN_NAMESPACE
 			config.mip_levels = 1; // TODO: Support cubemap mipmapping
 			auto format = config.format ? *config.format : wgpu::TextureFormat::RGBA8UnormSrgb;
 			out.gpu_data = state.device.createTexture(WGPUTextureDescriptor {
-				.label = toWGPU("Stylizer Cubemap Texture"),
+				.label = toWGPU(label ? *label : "Stylizer Cubemap Texture"),
 				.usage = config.usage,
 				.dimension = wgpu::TextureDimension::_2D,
 				.size = {size.x, size.y, size.z},
@@ -485,15 +489,15 @@ STYLIZER_BEGIN_NAMESPACE
 			return out;
 		}
 
-		static inline cube_texture create_from_images(wgpu_state& state, std::span<const image> images, texture_create_configuration config = {}, bool release_images = false) {
+		static inline cube_texture create_from_images(wgpu_state& state, std::span<const image> images, texture_create_configuration config = {}, STYLIZER_OPTIONAL(std::string_view) label = {}, bool release_images = false) {
 			auto image = image::merge(images);
 			if(release_images) for(auto& image: images)
 				const_cast<struct image&>(image).release();
-			return image.upload_frames_as_cube(state, config, true);
+			return image.upload_frames_as_cube(state, config, label, true);
 		}
 
 		static const cube_texture& default_cube_texture(wgpu_state& state) {
-			static auto_release<cube_texture> def = image::texture_not_found_frames(6).upload_frames_as_cube(state);
+			static auto_release<cube_texture> def = image::texture_not_found_frames(6).upload_frames_as_cube(state, {}, {"Stylizer Default Cubemap Texture"});
 			return def;
 		}
 
@@ -582,7 +586,7 @@ STYLIZER_BEGIN_NAMESPACE
 			if(label) (delete[] *label, label = nullptr);
 		}
 
-		static gpu_buffer zero_buffer(wgpu_state& state, size_t minimum_size = 0, drawing_state* draw = nullptr);
+		static const gpu_buffer& zero_buffer(wgpu_state& state, size_t minimum_size = 0, drawing_state* draw = nullptr);
 
 		template<typename T = std::byte>
 		gpu_buffer& write(wgpu_state& state, std::span<T> data, size_t offset = 0) {
@@ -750,6 +754,7 @@ STYLIZER_BEGIN_NAMESPACE
 		STYLIZER_GENERIC_AUTO_RELEASE_SUPPORT(geometry_buffer)
 		geometry_buffer(geometry_buffer&& other) { *this = std::move(other); }
 		geometry_buffer& operator=(geometry_buffer&& other) {
+			previous = std::exchange(other.previous, nullptr);
 			c().color = std::exchange(other.c().color, {});
 			c().depth = std::exchange(other.c().depth, {});
 			c().normal = std::exchange(other.c().normal, {});
@@ -761,17 +766,20 @@ STYLIZER_BEGIN_NAMESPACE
 		operator bool() { return color() && depth() && normal(); }
 
 		static geometry_buffer create_default(wgpu_state& state, vec2u size, geometry_buffer_config config = {}) {
-			geometry_buffer out = {};
+			geometry_buffer out{};
 			if(config.color_format == wgpu::TextureFormat::Undefined && state.surface_format != wgpu::TextureFormat::Undefined)
 				config.color_format = state.surface_format;
 			out.color() = texture::create(state, size,
-				{.format = config.color_format, .usage = wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc, .sampler_type = texture_create_sampler_type::None}
+				{.format = config.color_format, .usage = wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::CopyDst, .sampler_type = texture_create_sampler_type::None},
+				{"Stylizer Geometry Buffer Color Texture"}
 			);
 			out.depth() = texture::create(state, size,
-				{.format = config.depth_format, .usage = wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc, .sampler_type = texture_create_sampler_type::None}
+				{.format = config.depth_format, .usage = wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::CopyDst, .sampler_type = texture_create_sampler_type::None},
+				{"Stylizer Geometry Buffer Depth Texture"}
 			);
 			out.normal() = texture::create(state, size,
-				{.format = config.normal_format, .usage = wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc, .sampler_type = texture_create_sampler_type::None}
+				{.format = config.normal_format, .usage = wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::CopyDst, .sampler_type = texture_create_sampler_type::None},
+				{"Stylizer Geometry Buffer Normal Texture"}
 			);
 			out.previous = config.previous;
 			return out;
@@ -793,7 +801,7 @@ STYLIZER_BEGIN_NAMESPACE
 		std::span<const gpu_buffer> buffers() { return {(gpu_buffer*)nullptr, 0}; }
 		std::span<const texture> textures() { return {&color(), 3}; }
 
-		wgpu::BindGroup bind_group(struct drawing_state& draw, struct material& mat);
+		wgpu::BindGroup bind_group(struct drawing_state& draw, materialC& mat);
 
 		geometry_buffer& resize(wgpu_state& state, vec2u size) {
 			auto _new = create_default(state, size, {
@@ -801,18 +809,65 @@ STYLIZER_BEGIN_NAMESPACE
 				.depth_format = depth().gpu_data.getFormat(),
 				.normal_format = normal().gpu_data.getFormat(),
 			});
+			_new.previous = std::exchange(previous, nullptr);
 
 			release();
 			*this = std::move(_new);
 			return *this;
 		}
 
+		geometry_buffer clone_record_existing(wgpu_state& state, wgpu::CommandEncoder encoder) {
+			auto out = create_default(state, color().size(), {
+				.color_format = color().gpu_data.getFormat(),
+				.depth_format = depth().gpu_data.getFormat(),
+				.normal_format = normal().gpu_data.getFormat(),
+			});
+			out.previous = std::exchange(previous, nullptr);
+
+			out.color().copy_record_existing(encoder, color());
+			out.depth().copy_record_existing(encoder, depth());
+			out.normal().copy_record_existing(encoder, normal());
+			return out;
+		}
+		geometry_buffer clone(wgpu_state& state) {
+			auto_release encoder = state.device.createCommandEncoder();
+
+			auto out = clone_record_existing(state, encoder);
+
+			auto_release commands = encoder.finish();
+			state.device.getQueue().submit(commands);
+			return out;
+		}
+
 		struct drawing_state begin_drawing(wgpu_state& state, STYLIZER_OPTIONAL(colorC) clear_color = {}, STYLIZER_OPTIONAL(gpu_buffer&) utility_buffer = {});
 	};
 
+	// Utility function responsible for binding previous textures in various geometry buffer's bind_group functions
+	template<GbufferProvider Tgbuffer>
+	void bind_group_bind_previous_textures(wgpu_state& state, Tgbuffer* previous, size_t previous_textures_size, std::span<WGPUBindGroupEntry> entries, uint32_t& binding) {
+		auto& default_texture = const_cast<texture&>(texture::default_texture(state));
+		/*volatile*/ auto& default_depth_texture = const_cast<texture&>(texture::default_depth_texture(state));
+
+		for(size_t i = 0; auto& texture: previous ? previous->textures() : [&]{
+			std::vector<texture> defaultTextures(previous_textures_size, default_texture);
+			defaultTextures[1] = (texture&)default_depth_texture;
+			return defaultTextures;
+		}()) {
+			entries[binding] = WGPUBindGroupEntry{
+				.binding = binding++,
+				.textureView = texture.view
+			};
+			wgpu::Sampler sampler = texture.sampler ? texture.sampler : texture::default_sampler(state);
+			entries[binding] = WGPUBindGroupEntry{
+				.binding = binding++,
+				.sampler = sampler
+			};
+		}
+	}
+
 
 //////////////////////////////////////////////////////////////////////
-// # Frame State
+// # Drawing State
 //////////////////////////////////////////////////////////////////////
 
 
@@ -820,14 +875,19 @@ STYLIZER_BEGIN_NAMESPACE
 		STYLIZER_GENERIC_AUTO_RELEASE_SUPPORT(drawing_state)
 		drawing_state(geometry_buffer&& other) { *this = std::move(other); }
 		drawing_state& operator=(drawing_state&& other) {
+			c().state = std::exchange(other.c().state, nullptr);
+			c().gbuffer = std::exchange(other.c().gbuffer, nullptr);
+			utility_buffer = std::exchange(other.utility_buffer, nullptr);
 			pre_encoder = std::exchange(other.pre_encoder, nullptr);
 			render_encoder = std::exchange(other.render_encoder, nullptr);
 			render_pass = std::exchange(other.render_pass, nullptr);
 			finalizers = std::exchange(other.finalizers, {});
+			gbuffer_bind_group_function = std::exchange(other.gbuffer_bind_group_function, {});
 			return *this;
 		}
 		wgpu_state& state() { return *(wgpu_state*)c().state; }
-		geometry_buffer& gbuffer() { return *(geometry_buffer*)c().gbuffer; }
+		template<GbufferProvider Tgbuffer = geometry_buffer>
+		Tgbuffer& gbuffer() { return *(Tgbuffer*)c().gbuffer; }
 		operator bool() { return pre_encoder && render_encoder && render_pass; }
 
 		void release() {
@@ -843,7 +903,7 @@ STYLIZER_BEGIN_NAMESPACE
 		void defer(F&& on_release) { finalizers->emplace_back(std::move(on_release)); }
 
 		wgpu::BindGroupEntry utility_buffer_bind_group_entry() {
-			auto zeroBuffer = gpu_buffer::zero_buffer(state(), minimum_utility_buffer_size, this);
+			auto& zeroBuffer = gpu_buffer::zero_buffer(state(), minimum_utility_buffer_size, this);
 			return WGPUBindGroupEntry{
 				.binding = 0,
 				.buffer = utility_buffer ? utility_buffer->gpu_data : zeroBuffer.gpu_data,
@@ -1080,13 +1140,12 @@ STYLIZER_BEGIN_NAMESPACE
 		}
 
 		computer& dispatch(wgpu_state& state, vec3u workgroups) {
-			auto encoder = state.device.createCommandEncoder();
+			auto_release encoder = state.device.createCommandEncoder();
 			auto record_state = dispatch_record_existing(state, encoder, workgroups);
 
 			state.device.getQueue().submit(encoder.finish());
 
 			record_state.release();
-			encoder.release();
 			return *this;
 		}
 		inline std::future<computer*> dispatch_async(wgpu_state& state, vec3u workgroups, STYLIZER_OPTIONAL(size_t) initial_pool_size = {}) {
@@ -1239,7 +1298,7 @@ STYLIZER_BEGIN_NAMESPACE
 
 			if(pipeline) pipeline.release();
 			pipeline = state.device.createRenderPipeline(pipelineDesc);
-			
+
 			return *this;
 		}
 
@@ -1302,7 +1361,7 @@ STYLIZER_BEGIN_NAMESPACE
 		}
 
 		static mesh& fullscreen_mesh(wgpu_state& state, bool upload = true) {
-			static std::optional<mesh> out{}; 
+			static std::optional<mesh> out{};
 			if(!out) {
 				out = mesh{}; out->zero();
 				out->vertex_count = 3;
@@ -1583,7 +1642,7 @@ STYLIZER_BEGIN_NAMESPACE
 				bindings[2].buffer = instanceBuffer.gpu_data;
 				bindings[2].size = instanceBuffer.size;
 			} else {
-				auto zeroBuffer = gpu_buffer::zero_buffer(draw.state(), sizeof(model_instance), &draw);
+				auto& zeroBuffer = gpu_buffer::zero_buffer(draw.state(), sizeof(model_instance), &draw);
 
 				bindings[2].buffer = zeroBuffer.gpu_data;
 				bindings[2].size = sizeof(model_instance);
@@ -1598,9 +1657,9 @@ STYLIZER_BEGIN_NAMESPACE
 				auto metadata = mesh.metadata();
 				size_t attribute_size = metadata.vertex_count * sizeof(vec4f);
 				size_t index_size = metadata.triangle_count * 3 * sizeof(index_t);
-				auto zeroBuffer = gpu_buffer::zero_buffer(draw.state(), std::max<size_t>(attribute_size, index_size), &draw); // TODO: Why is the min index size 144?
+				auto& zeroBuffer = gpu_buffer::zero_buffer(draw.state(), std::max<size_t>(attribute_size, index_size), &draw); // TODO: Why is the min index size 144?
 
-				auto drawTimeBindGroup = draw.gbuffer().bind_group(draw, mat);
+				auto drawTimeBindGroup = draw.gbuffer_bind_group_function(&draw, &mat);
 				draw.render_pass.setBindGroup(0, drawTimeBindGroup, 0, nullptr);
 				// draw.defer([group = *drawTimeBindGroup]{ /* const_cast<wgpu::BindGroup&>(group).release(); */ });
 

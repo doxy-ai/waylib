@@ -10,6 +10,7 @@ namespace pbr {
 		p.process_from_memory_and_cache(b::embed<"shaders/pbr_gbuffer.wgsl">().str(), "stylizer/pbr/gbuffer", config);
 		p.process_from_memory_and_cache(b::embed<"shaders/pbr_material_data.wgsl">().str(), "stylizer/pbr/material_data", config);
 		p.process_from_memory_and_cache(b::embed<"shaders/pbr_material.wgsl">().str(), "stylizer/pbr/material", config);
+		p.process_from_memory_and_cache(b::embed<"shaders/pbr_combiners.wgsl">().str(), "stylizer/pbr/combiners", config);
 		return p;
 	}
 

@@ -28,6 +28,7 @@ STYLIZER_BEGIN_NAMESPACE
 
 			geometry_buffer(geometry_buffer&& other) { *this = std::move(other); }
 			geometry_buffer& operator=(geometry_buffer&& other) {
+				previous = std::exchange(other.previous, nullptr);
 				c().color = std::exchange(other.c().color, {});
 				c().depth = std::exchange(other.c().depth, {});
 				c().normal = std::exchange(other.c().normal, {});
@@ -41,20 +42,24 @@ STYLIZER_BEGIN_NAMESPACE
 			operator bool() { return color() && depth() && normal() && packed(); }
 
 			static geometry_buffer create_default(wgpu_state& state, vec2u size, pbr::geometry_buffer_config config = {}) {
-				geometry_buffer out = {};
+				geometry_buffer out{};
 				if(config.base.color_format == wgpu::TextureFormat::Undefined && state.surface_format != wgpu::TextureFormat::Undefined)
 					config.base.color_format = state.surface_format;
 				out.color() = texture::create(state, size,
-					{.format = config.base.color_format, .usage = wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc, .sampler_type = texture_create_sampler_type::None}
+					{.format = config.base.color_format, .usage = wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::CopyDst, .sampler_type = texture_create_sampler_type::None},
+					{"Stylizer PBR Geometry Buffer Color Texture"}
 				);
 				out.depth() = texture::create(state, size,
-					{.format = config.base.depth_format, .usage = wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc, .sampler_type = texture_create_sampler_type::None}
+					{.format = config.base.depth_format, .usage = wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::CopyDst, .sampler_type = texture_create_sampler_type::None},
+					{"Stylizer PBR Geometry Buffer Depth Texture"}
 				);
 				out.normal() = texture::create(state, size,
-					{.format = config.base.normal_format, .usage = wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc, .sampler_type = texture_create_sampler_type::None}
+					{.format = config.base.normal_format, .usage = wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::CopyDst, .sampler_type = texture_create_sampler_type::None},
+					{"Stylizer PBR Geometry Buffer Normal Texture"}
 				);
 				out.packed() = texture::create(state, size,
-					{.format = config.packed_format, .usage = wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc, .sampler_type = texture_create_sampler_type::None}
+					{.format = config.packed_format, .usage = wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::CopyDst, .sampler_type = texture_create_sampler_type::None},
+					{"Stylizer PBR Geometry Buffer Packed Texture"}
 				);
 				out.previous = config.base.previous;
 				return out;
@@ -76,14 +81,18 @@ STYLIZER_BEGIN_NAMESPACE
 			}
 
 			std::span<const gpu_buffer> buffers() { return {(gpu_buffer*)nullptr, 0}; }
-			std::span<const texture> textures() { return {&color(), 3}; }
+			std::span<const texture> textures() { return {&color(), 4}; }
 
-			wgpu::BindGroup bind_group(drawing_state& draw, material& mat) {
-				auto zeroBuffer = gpu_buffer::zero_buffer(draw.state(), minimum_utility_buffer_size, &draw);
-
-				std::array<WGPUBindGroupEntry, 1> entries = {
+			wgpu::BindGroup bind_group(drawing_state& draw, sl::materialC& mat) {
+				// Bind utility buffer
+				std::array<WGPUBindGroupEntry, 9> entries = {
 					draw.utility_buffer_bind_group_entry()
 				};
+
+				// Bind previous textures
+				uint32_t binding = 1;
+				bind_group_bind_previous_textures(draw.state(), static_cast<geometry_buffer*>(previous), 4, entries, binding);
+
 				return draw.state().device.createBindGroup(WGPUBindGroupDescriptor{ // TODO: free when done somehow...
 					.label = toWGPU("Stylizer PBR Gbuffer Bind Group"),
 					.layout = mat.pipeline.getBindGroupLayout(0),
@@ -98,10 +107,35 @@ STYLIZER_BEGIN_NAMESPACE
 					.depth_format = depth().gpu_data.getFormat(),
 					.normal_format = normal().gpu_data.getFormat(),
 				}, .packed_format = packed().gpu_data.getFormat()});
+				_new.previous = std::exchange(previous, nullptr);
 
 				release();
 				*this = std::move(_new);
 				return *this;
+			}
+
+			geometry_buffer clone_record_existing(wgpu_state& state, wgpu::CommandEncoder encoder) {
+				auto out = create_default(state, color().size(), {.base ={
+					.color_format = color().gpu_data.getFormat(),
+					.depth_format = depth().gpu_data.getFormat(),
+					.normal_format = normal().gpu_data.getFormat(),
+				}, .packed_format = packed().gpu_data.getFormat()});
+				out.previous = std::exchange(previous, nullptr);
+
+				out.color().copy_record_existing(encoder, color());
+				out.depth().copy_record_existing(encoder, depth());
+				out.normal().copy_record_existing(encoder, normal());
+				out.packed().copy_record_existing(encoder, packed());
+				return out;
+			}
+			geometry_buffer clone(wgpu_state& state) {
+				auto_release encoder = state.device.createCommandEncoder();
+
+				auto out = clone_record_existing(state, encoder);
+
+				auto_release commands = encoder.finish();
+				state.device.getQueue().submit(commands);
+				return out;
 			}
 
 			drawing_state begin_drawing(wgpu_state& state, STYLIZER_OPTIONAL(colorC) clear_color = {}, STYLIZER_OPTIONAL(gpu_buffer&) utility_buffer = {}) {
@@ -119,6 +153,12 @@ STYLIZER_BEGIN_NAMESPACE
 				static finalizer_list finalizers = {};
 				out.finalizers = &finalizers;
 
+				// Set the bind group callback
+				out.gbuffer_bind_group_function = +[](drawing_stateC* draw_, sl::materialC* mat) {
+					auto& draw = *(drawing_state*)draw_;
+					auto& gbuffer = (geometry_buffer&)draw.gbuffer();
+					return gbuffer.bind_group(draw, *mat);
+				};
 				if(utility_buffer) out.utility_buffer = static_cast<gpu_bufferC*>(&utility_buffer.value);
 				return out;
 			}
@@ -126,7 +166,7 @@ STYLIZER_BEGIN_NAMESPACE
 
 
 		struct material: public materialC {
-			STYLIZER_GENERIC_AUTO_RELEASE_SUPPORT(material)
+			STYLIZER_GENERIC_AUTO_RELEASE_SUPPORT_SUB_NAMESPACE(material, pbr)
 			inline sl::material& core() { return *(sl::material*)this;}
 
 			material(material&& other) { *this = std::move(other); }
@@ -196,8 +236,10 @@ STYLIZER_BEGIN_NAMESPACE
 					.size = gpu_size,
 				});
 				// Bind core textures
-				for(size_t i = 0; auto& texture_: pbr_textures()) {
-					texture& texture = *texture_ ? **texture_ : (i++ == pbr_textures().size() - 2 ? default_cube_texture : default_texture);
+				for(size_t i = 0, size = pbr_textures().size(); i < size; ++i) {
+					auto& texture_ = *pbr_textures()[i];
+					texture& texture = texture_ ? *texture_ 
+						: (i == pbr_textures().size() - 1 ? default_cube_texture : default_texture);
 					entries.emplace_back(WGPUBindGroupEntry{
 						.binding = binding++,
 						.textureView = texture.view
