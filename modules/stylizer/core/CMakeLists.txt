@@ -4,7 +4,7 @@ add_subdirectory(thirdparty/glm)
 add_subdirectory(thirdparty/WebGPU-distribution)
 add_subdirectory(thirdparty/embed)
 
-add_library(stylizer_core core.cpp)
+add_library(stylizer_core core.cpp thirdparty/mikktspace.c)
 target_link_libraries(stylizer_core PUBLIC webgpu glm::glm)
 
 set(MODULE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../../)

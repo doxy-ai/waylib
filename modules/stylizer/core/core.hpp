@@ -1544,6 +1544,9 @@ STYLIZER_BEGIN_NAMESPACE
 			index_buffer = indexBuffer.gpu_data;
 			return *this;
 		}
+
+		mesh& generate_normals(bool weighted_normals = false);
+		mesh& generate_tangents();
 	};
 
 

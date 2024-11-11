@@ -3,6 +3,8 @@
 #define IS_STYLIZER_CORE_CPP
 #include "core.hpp"
 
+#include "thirdparty/mikktspace.h"
+
 #include <battery/embed.hpp>
 #include <algorithm>
 #include <map>
@@ -789,6 +791,104 @@ std::pair<wgpu::RenderPipelineDescriptor, STYLIZER_OPTIONAL(wgpu::FragmentState)
 		return {pipelineDesc, fragment};
 	}
 	return {pipelineDesc, {}};
+}
+
+
+//////////////////////////////////////////////////////////////////////
+// # Mesh
+//////////////////////////////////////////////////////////////////////
+
+
+index_t get_index(const mesh& mesh, const int triangleID, const int vertID) {
+	if(mesh.indices)
+		return mesh.indices[triangleID * 3 + vertID];
+	else return triangleID * 3 + vertID;
+};
+
+
+mesh& mesh::generate_normals(bool weighted_normals /*= false*/) {
+	if(normals && *normals) delete [] *normals;
+	normals = {true, new vec4f[vertex_count]};
+	std::fill(*normals, *normals + vertex_count, vec4f(0));
+
+	for(size_t i = 0; i < triangle_count; ++i) {
+		vec3u verts(get_index(*this, i, 0), get_index(*this, i, 1), get_index(*this, i, 2));
+		vec3f x = positions[verts.x];
+		vec3f y = positions[verts.y];
+		vec3f z = positions[verts.z];
+
+		vec3f xy = y - x;
+		vec3f xz = z - x;
+		vec3f n = cross(xy, xz);
+		if(!weighted_normals) n = normalize(n); // Weighted normals gives more importance to larger triangles
+
+		(*normals)[verts.x] += vec4f(n, 0);
+		(*normals)[verts.y] += vec4f(n, 0);
+		(*normals)[verts.z] += vec4f(n, 0);
+	}
+
+	for(size_t i = 0; i < vertex_count; ++i)
+		normals[i] = normalize(normals[i]);
+
+	return *this;
+}
+
+mesh& mesh::generate_tangents() {
+	constexpr static auto getNumFaces = +[](const SMikkTSpaceContext* pContext) -> int {
+		const struct mesh& mesh = *(struct mesh*)pContext->m_pUserData;
+		return mesh.triangle_count;
+	};
+	constexpr static auto getNumVerticesOfFace = +[](const SMikkTSpaceContext * pContext, const int iFace) -> int {
+		return 3;
+	};
+	constexpr static auto getPosition = +[](const SMikkTSpaceContext* pContext, float fvPosOut[], const int iFace, const int iVert) {
+		const struct mesh& mesh = *(struct mesh*)pContext->m_pUserData;
+		auto& pos = mesh.positions[get_index(mesh, iFace, iVert)];
+		fvPosOut[0] = pos.x;
+		fvPosOut[1] = pos.y;
+		fvPosOut[2] = pos.z;
+	};
+	constexpr static auto getNormal = +[](const SMikkTSpaceContext* pContext, float fvPosOut[], const int iFace, const int iVert) {
+		const struct mesh& mesh = *(struct mesh*)pContext->m_pUserData;
+		auto& norm = mesh.normals[get_index(mesh, iFace, iVert)];
+		fvPosOut[0] = norm.x;
+		fvPosOut[1] = norm.y;
+		fvPosOut[2] = norm.z;
+	};
+	constexpr static auto getTexCoord = +[](const SMikkTSpaceContext* pContext, float fvPosOut[], const int iFace, const int iVert) {
+		const struct mesh& mesh = *(struct mesh*)pContext->m_pUserData;
+		auto& uvs = mesh.uvs[get_index(mesh, iFace, iVert)];
+		fvPosOut[0] = uvs.x;
+		fvPosOut[1] = uvs.y;
+	};
+	constexpr static auto setTangent = +[](const SMikkTSpaceContext* pContext, const float fvTangent[], const float fSign, const int iFace, const int iVert) {
+		struct mesh& mesh = *(struct mesh*)pContext->m_pUserData;
+		size_t i = get_index(mesh, iFace, iVert);
+		mesh.tangents[i] = vec4f(fvTangent[0], fvTangent[1], fvTangent[2], fSign);
+	};
+
+	assert(*uvs && !std::isnan(uvs[0].x) && !std::isnan(uvs[0].y)); // Requires UVs in the first slot
+	if(!*normals) generate_normals();
+
+	if(tangents && *tangents) delete [] *tangents;
+	tangents = {true, new vec4f[vertex_count]};
+
+	SMikkTSpaceInterface i{
+		.m_getNumFaces = getNumFaces,
+		.m_getNumVerticesOfFace = getNumVerticesOfFace,
+		.m_getPosition = getPosition,
+		.m_getNormal = getNormal,
+		.m_getTexCoord = getTexCoord,
+		.m_setTSpaceBasic = setTangent,
+		.m_setTSpace = nullptr
+	};
+	SMikkTSpaceContext c {
+		.m_pInterface = &i,
+		.m_pUserData = this
+	};
+	genTangSpaceDefault(&c);
+
+	return *this;
 }
 
 
